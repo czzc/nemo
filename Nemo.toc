@@ -1,7 +1,7 @@
 ## Interface: 120001
 ## Title: Nemo
 ## Notes: Your fishing catch history for every zone, one cast at a time.
-## Author: cazzac
+## Author: czzc
 ## Version: 1.0.2
 ## SavedVariables: NemoDB
 ## IconTexture: Interface\Icons\INV_Fishingpole_02

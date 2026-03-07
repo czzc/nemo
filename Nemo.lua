@@ -31,6 +31,7 @@ local DEFAULT_SETTINGS = {
     anchorPoint    = nil,
     anchorX        = nil,
     anchorY        = nil,
+    totalFishingTime = 0
 }
 
 -- Accent color presets for the picker
@@ -84,6 +85,13 @@ local QUALITY_COLORS = {
     [4] = { 0.64, 0.21, 0.93 },   -- Epic (purple)
     [5] = { 1.00, 0.50, 0.00 },   -- Legendary (orange)
 }
+
+---------------------------------------------------------------------------
+-- LOCALS
+---------------------------------------------------------------------------
+local sessionText
+-- local footerText
+local totalFishingTimeText
 
 ---------------------------------------------------------------------------
 -- HELPERS
@@ -266,7 +274,7 @@ sep:SetColorTexture(1, 1, 1, 0.08)
 
 local scrollFrame = CreateFrame("ScrollFrame", "NemoScrollFrame", frame, "UIPanelScrollFrameTemplate")
 scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -50)
-scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -26, 32)
+scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -26, 44)
 
 -- Style the scrollbar to be less obtrusive
 local scrollBar = NemoScrollFrameScrollBar
@@ -277,6 +285,10 @@ end
 local content = CreateFrame("Frame", nil, scrollFrame)
 content:SetSize(240, 1)
 scrollFrame:SetScrollChild(content)
+
+frame:SetScript("OnSizeChanged", function(self, width, height)
+    content:SetWidth(width - 34)
+end)
 
 ---------------------------------------------------------------------------
 -- RESIZE HANDLE
@@ -299,15 +311,23 @@ resizer:SetScript("OnMouseUp", function()
     settings.frameHeight = frame:GetHeight()
 end)
 
+---------------------------------------------------------------------------
+-- FOOTER STATS
+---------------------------------------------------------------------------
 -- Total catches footer (zone totals)
-local footerText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-footerText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 16)
+footerText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+footerText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 28)
 footerText:SetTextColor(0.4, 0.4, 0.4)
 
 -- Session stats
-local sessionText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-sessionText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 4)
+sessionText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+sessionText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 16)
 sessionText:SetTextColor(0.35, 0.35, 0.35)
+
+-- Total Fishing Time
+totalFishingTimeText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+totalFishingTimeText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 4)
+totalFishingTimeText:SetTextColor(0.35, 0.35, 0.35)
 
 ---------------------------------------------------------------------------
 -- ROW RENDERING
@@ -453,7 +473,7 @@ local function RefreshDisplay()
     if settings.showTotal then
         local timeStr = FormatFishingTime(GetTotalFishingTime())
 
-        local zoneLine = total .. " caught  ·  " .. unique .. " unique"
+        local zoneLine = "Zone: " ..total .. " caught  ·  " .. unique .. " unique"
         footerText:SetText(zoneLine)
 
         if session.catches > 0 then
@@ -461,11 +481,16 @@ local function RefreshDisplay()
         else
             sessionText:SetText("")
         end
+
+        totalFishingTimeText:SetText("Total fishing time: " .. FormatFishingTime(settings.totalFishingTime or 0))
     else
-        footerText:SetText("")
+        -- footerText:SetText("")
         sessionText:SetText("")
+        totalFishingTimeText:SetText("")
     end
 end
+
+frame.RefreshDisplay = RefreshDisplay
 
 ---------------------------------------------------------------------------
 -- SETTINGS PANEL
@@ -774,7 +799,9 @@ local function OnFishingDetected()
             if hideGeneration == myGeneration and settings.autoHide then
                 -- Pause the fishing timer
                 if session.fishStart then
-                    session.totalTime = session.totalTime + (GetTime() - session.fishStart)
+                    local delta = GetTime() - session.fishStart
+                    session.totalTime = session.totalTime + delta
+                    settings.totalFishingTime = (settings.totalFishingTime or 0) + delta
                     session.fishStart = nil
                 end
                 isFishing = false
@@ -917,6 +944,26 @@ if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall then
     )
 end
 
+local function ResetAllData() 
+    NemoDB.catches = {}
+    InvalidateTooltipCache()
+    DEFAULT_CHAT_FRAME:AddMessage("|cFF4CBFF0Nemo|r: All catch data wiped.")
+    if frame:IsShown() then RefreshDisplay() end
+end
+
+StaticPopupDialogs["NEMO_RESET_CONFIRM"] = {
+    text = "Are you sure you want to wipe ALL of your catch data? This cannot be undone.",
+    button1 = "Yes, wipe it",
+    button2 = "No, keep it",
+    OnAccept = function()
+        ResetAllData()
+    end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3
+}
+
 ---------------------------------------------------------------------------
 -- INIT
 ---------------------------------------------------------------------------
@@ -931,6 +978,7 @@ eventFrame:RegisterEvent("ZONE_CHANGED")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("LOOT_READY")
 eventFrame:RegisterEvent("LOOT_CLOSED")
+eventFrame:RegisterEvent("PLAYER_LOGOUT")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -960,6 +1008,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             if not NemoDB.settings then NemoDB.settings = {} end
 
             FillDefaults(NemoDB.settings, DEFAULT_SETTINGS)
+            local DEPRECATED_KEYS = {
+                "alertAnchorY", "alertAnchorX", "alertAnchorPoint", "alertLocked"
+            }
+            for _, key in ipairs(DEPRECATED_KEYS) do
+                NemoDB.settings[key] = nil
+            end
             settings = NemoDB.settings
             ApplyFrameStyle()
             resizer:SetShown(not settings.locked)
@@ -999,9 +1053,17 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         if GetCurrentMapId() == VOIDSTORM_MAP_ID then
             isFishing = false
         end
+    elseif event == "PLAYER_LOGOUT" then
+        if session.fishStart then
+            local delta = GetTime() - session.fishStart
+            settings.totalFishingTime = (settings.totalFishingTime or 0) + delta
+            session.fishStart = nil
+        end
     elseif event == "PLAYER_REGEN_DISABLED" then
         if session.fishStart then
-            session.totalTime = session.totalTime + (GetTime() - session.fishStart)
+            local delta = GetTime() - session.fishStart
+            session.totalTime = session.totalTime + delta
+            settings.totalFishingTime = (settings.totalFishingTime or 0) + delta
             session.fishStart = nil
         end
         if settings.autoHide then
@@ -1038,15 +1100,7 @@ SlashCmdList["NEMO"] = function(input)
         end
 
     elseif cmd == "reset" then
-        DEFAULT_CHAT_FRAME:AddMessage(
-            "|cFF4CBFF0Nemo|r: Type /nemo resetconfirm to wipe ALL catch data.")
-
-    elseif cmd == "resetconfirm" then
-        NemoDB.catches = {}
-        DEFAULT_CHAT_FRAME:AddMessage("|cFF4CBFF0Nemo|r: All catch data wiped.")
-        InvalidateTooltipCache()
-        if frame:IsShown() then RefreshDisplay() end
-
+        StaticPopup_Show("NEMO_RESET_CONFIRM")
     elseif cmd == "zone" then
         local mapId = GetCurrentMapId()
         local name = GetCurrentZoneName()

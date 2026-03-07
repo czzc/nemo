@@ -1,0 +1,5 @@
+ignore:
+
+- screenshots
+- README.md
+- .gitignore

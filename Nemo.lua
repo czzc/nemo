@@ -122,6 +122,35 @@ local function FillDefaults(target, defaults)
     end
 end
 
+local function FormatFishingTime(seconds)
+    if seconds < 60 then
+        return string.format("%ds", seconds)
+    elseif seconds < 3600 then
+        return string.format("%dm %ds", math.floor(seconds / 60), seconds % 60)
+    else
+        return string.format("%dh %dm", math.floor(seconds / 3600), math.floor((seconds % 3600) / 60))
+    end
+end
+
+local function GetTotalFishingTime()
+    local fishTime = session.totalTime
+    if session.fishStart then
+        fishTime = fishTime + (GetTime() - session.fishStart)
+    end
+    return fishTime
+end
+
+local function UpdateTimerText()
+    if not settings.showTotal then return end
+
+    if session.catches > 0 then
+        local timeStr = FormatFishingTime(GetTotalFishingTime())    
+        sessionText:SetText("Session: " .. session.catches .. " caught  ·  " .. timeStr)
+    else
+        sessionText:SetText("")
+    end
+end
+
 ---------------------------------------------------------------------------
 -- MAIN FRAME
 ---------------------------------------------------------------------------
@@ -422,23 +451,7 @@ local function RefreshDisplay()
     content:SetHeight(#catches * 23)
 
     if settings.showTotal then
-        local fishTime = session.totalTime
-        if session.fishStart then
-            fishTime = fishTime + (GetTime() - session.fishStart)
-        end
-
-        local timeStr
-        if fishTime < 60 then
-            timeStr = string.format("%ds", fishTime)
-        elseif fishTime < 3600 then
-            timeStr = string.format("%dm %ds", math.floor(fishTime / 60), fishTime % 60)
-        else
-            timeStr = string.format("%dh %dm", math.floor(fishTime / 3600),
-                math.floor((fishTime % 3600) / 60))
-        end
-
-        local sessionUnique = 0
-        for _ in pairs(session.unique) do sessionUnique = sessionUnique + 1 end
+        local timeStr = FormatFishingTime(GetTotalFishingTime())
 
         local zoneLine = total .. " caught  ·  " .. unique .. " unique"
         footerText:SetText(zoneLine)
@@ -639,6 +652,15 @@ gearBtn:SetScript("OnClick", function()
 end)
 
 ---------------------------------------------------------------------------
+-- TOOLTIP CACHING
+---------------------------------------------------------------------------
+local tooltipCache = {}
+
+local function InvalidateTooltipCache()
+    wipe(tooltipCache)
+end
+
+---------------------------------------------------------------------------
 -- LOOT CAPTURE (Items)
 ---------------------------------------------------------------------------
 
@@ -682,6 +704,8 @@ local function OnLootMessage(event, msg)
     session.catches = session.catches + lootCount
     session.unique[itemName] = true
 
+    InvalidateTooltipCache()
+
     if frame:IsShown() then RefreshDisplay() end
 end
 
@@ -722,6 +746,8 @@ local function OnCurrencyMessage(event, msg)
     session.catches = session.catches + lootCount
     session.unique[currencyName] = true
 
+    InvalidateTooltipCache()
+    
     if frame:IsShown() then RefreshDisplay() end
 end
 
@@ -808,7 +834,7 @@ frame:SetScript("OnUpdate", function(self, elapsed)
     tickAccumulator = tickAccumulator + elapsed
     if tickAccumulator >= 1.0 then
         tickAccumulator = 0
-        if self:IsShown() then RefreshDisplay() end
+        if self:IsShown() then UpdateTimerText() end
     end
 end)
 
@@ -820,6 +846,8 @@ end)
 ---------------------------------------------------------------------------
 
 local function BuildItemZoneLookup(itemName)
+    if tooltipCache[itemName] then return tooltipCache[itemName] end
+
     local zones = {}
 
     if not NemoDB.catches then return zones end
@@ -838,7 +866,7 @@ local function BuildItemZoneLookup(itemName)
     end
 
     table.sort(zones, function(a, b) return a.count > b.count end)
-
+    tooltipCache[itemName] = zones
     return zones
 end
 
@@ -902,6 +930,7 @@ eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 eventFrame:RegisterEvent("ZONE_CHANGED")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("LOOT_READY")
+eventFrame:RegisterEvent("LOOT_CLOSED")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -966,7 +995,10 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
 
     elseif event == "ZONE_CHANGED_NEW_AREA" or event == "ZONE_CHANGED" then
         OnZoneChanged()
-
+    elseif event == "LOOT_CLOSED" then
+        if GetCurrentMapId() == VOIDSTORM_MAP_ID then
+            isFishing = false
+        end
     elseif event == "PLAYER_REGEN_DISABLED" then
         if session.fishStart then
             session.totalTime = session.totalTime + (GetTime() - session.fishStart)
@@ -1012,6 +1044,7 @@ SlashCmdList["NEMO"] = function(input)
     elseif cmd == "resetconfirm" then
         NemoDB.catches = {}
         DEFAULT_CHAT_FRAME:AddMessage("|cFF4CBFF0Nemo|r: All catch data wiped.")
+        InvalidateTooltipCache()
         if frame:IsShown() then RefreshDisplay() end
 
     elseif cmd == "zone" then
@@ -1042,6 +1075,7 @@ SlashCmdList["NEMO"] = function(input)
         if removed > 0 then
             DEFAULT_CHAT_FRAME:AddMessage(string.format(
                 "|cFF4CBFF0Nemo|r: Removed \"%s\" from %d zone(s).", itemName, removed))
+            InvalidateTooltipCache()
             if frame:IsShown() then RefreshDisplay() end
         else
             DEFAULT_CHAT_FRAME:AddMessage(string.format(
@@ -1049,19 +1083,7 @@ SlashCmdList["NEMO"] = function(input)
         end
 
     elseif cmd == "session" then
-        local fishTime = session.totalTime
-        if session.fishStart then
-            fishTime = fishTime + (GetTime() - session.fishStart)
-        end
-        local timeStr
-        if fishTime < 60 then
-            timeStr = string.format("%ds", fishTime)
-        elseif fishTime < 3600 then
-            timeStr = string.format("%dm %ds", math.floor(fishTime / 60), fishTime % 60)
-        else
-            timeStr = string.format("%dh %dm", math.floor(fishTime / 3600),
-                math.floor((fishTime % 3600) / 60))
-        end
+        local timeStr = FormatFishingTime(GetTotalFishingTime())
         local sessionUnique = 0
         for _ in pairs(session.unique) do sessionUnique = sessionUnique + 1 end
 

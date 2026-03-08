@@ -54,7 +54,7 @@ local COLOR_PRESETS = {
 local VOIDSTORM_MAP_ID = 2405
 
 -- The fishable vortex NPC name (used for LOOT_READY target filtering)
-local VORTEX_TARGET_NAME = "Hyper-Compressed Ocean"
+local VORTEX_TARGET_NAME = "Hyper-Compressed Ocean Target"
 
 ---------------------------------------------------------------------------
 -- STATE
@@ -62,6 +62,7 @@ local VORTEX_TARGET_NAME = "Hyper-Compressed Ocean"
 local isFishing = false
 local hideGeneration = 0
 local settings
+local wasVortexChannel = false
 
 -- Session tracking (resets each login)
 local session = {
@@ -90,7 +91,7 @@ local QUALITY_COLORS = {
 -- LOCALS
 ---------------------------------------------------------------------------
 local sessionText
--- local footerText
+local footerText
 local totalFishingTimeText
 
 ---------------------------------------------------------------------------
@@ -484,7 +485,7 @@ local function RefreshDisplay()
 
         totalFishingTimeText:SetText("Total fishing time: " .. FormatFishingTime(settings.totalFishingTime or 0))
     else
-        -- footerText:SetText("")
+        footerText:SetText("")
         sessionText:SetText("")
         totalFishingTimeText:SetText("")
     end
@@ -657,22 +658,25 @@ autoHideCheck:SetScript("OnClick", function(self)
     settings.autoHide = self:GetChecked()
 end)
 
+local function OpenSettings()
+    opacitySlider:SetValue(settings.opacity)
+    opacitySlider.UpdateLabel()
+    scaleSlider:SetValue(settings.scale)
+    scaleSlider.UpdateLabel()
+    lockCheck:SetChecked(settings.locked)
+    totalCheck:SetChecked(settings.showTotal)
+    autoShowCheck:SetChecked(settings.autoShow)
+    autoHideCheck:SetChecked(settings.autoHide)
+    local r,g,b = GetAccent()
+    sTitle:SetTextColor(r,g,b)
+    settingsFrame:Show()
+end
+
 gearBtn:SetScript("OnClick", function()
     if settingsFrame:IsShown() then
         settingsFrame:Hide()
     else
-        opacitySlider:SetValue(settings.opacity)
-        opacitySlider.UpdateLabel()
-        scaleSlider:SetValue(settings.scale)
-        scaleSlider.UpdateLabel()
-        -- Sync checkbox states
-        lockCheck:SetChecked(settings.locked)
-        totalCheck:SetChecked(settings.showTotal)
-        autoShowCheck:SetChecked(settings.autoShow)
-        autoHideCheck:SetChecked(settings.autoHide)
-        local r, g, b = GetAccent()
-        sTitle:SetTextColor(r, g, b)
-        settingsFrame:Show()
+       OpenSettings()
     end
 end)
 
@@ -700,6 +704,7 @@ local function OnLootMessage(event, msg)
 
     local itemName = itemLink:match("%[(.-)%]")
     if not itemName then return end
+    itemName = itemName:gsub("%s*|A.-|a", "")
 
     -- Check for a stack count (e.g. "x5" at the end)
     local countStr = msg:match("x(%d+)")
@@ -818,19 +823,12 @@ end
 
 ---------------------------------------------------------------------------
 -- VOIDSTORM VORTEX DETECTION
--- Hyper-Compressed Ocean vortexes in Voidstorm (map 2405) don't trigger
--- any spellcast events when right-clicked. Instead, we detect catches via
--- LOOT_READY: when loot opens in Voidstorm and the player either has no
--- target or has the vortex targeted (and is NOT mounted), it's almost
--- certainly a vortex catch. This sets isFishing = true so the normal
--- loot/currency handlers can capture the catch.
--- 
--- It could also be an herbalism/mining node loot, but this is what
--- i've got for now. Maybe Blizzard will fix it in a future patch...
---
--- The mounted check prevents false positives when a player has the vortex
--- targeted (e.g. from a /target macro) but is looting something else
--- (herbs, chests, mining nodes) while flying around.
+-- Oceanic Vortexes in voidstorm dont trigger UNIT_SPELLCAST_SUCCEEDED when
+-- interacted with, because of course they dont.  They DO, however, use
+-- UNIT_SPELLCAST_CHANNEL_START when you start 'fishing' from the vortex.
+-- We use this to set a wasVortexChannel flag and then check for it in
+-- LOOT_READY (or the vortex's base name [Hyper-Compressed Ocean Target]) to
+-- identify vortex catches and set isFishing to true for the loot handlers.
 ---------------------------------------------------------------------------
 
 local function OnLootReady()
@@ -839,10 +837,9 @@ local function OnLootReady()
 
     local targetName = UnitName("target")
 
-    -- Vortex catch if: no target at all, or targeting the vortex while dismounted
-    if not targetName or (targetName == VORTEX_TARGET_NAME and not IsMounted()) then
+    if wasVortexChannel or (targetName == VORTEX_TARGET_NAME and not IsMounted()) then
         isFishing = true
-        -- Show the catch log if autoShow is enabled
+        wasVortexChannel = false
         if settings.autoShow and not frame:IsShown() then
             RefreshDisplay()
             frame:Show()
@@ -979,6 +976,7 @@ eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("LOOT_READY")
 eventFrame:RegisterEvent("LOOT_CLOSED")
 eventFrame:RegisterEvent("PLAYER_LOGOUT")
+eventFrame:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
 
 eventFrame:SetScript("OnEvent", function(self, event, ...)
     if event == "ADDON_LOADED" then
@@ -1014,7 +1012,23 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             for _, key in ipairs(DEPRECATED_KEYS) do
                 NemoDB.settings[key] = nil
             end
+
             settings = NemoDB.settings
+
+            for mapId, zoneData in pairs(NemoDB.catches) do
+                for itemName, data in pairs(zoneData) do
+                    local clean = itemName:gsub("%s*|A.-|a", "")
+                    if clean ~= itemName then
+                        if zoneData[clean] then
+                            zoneData[clean].count = zoneData[clean].count + data.count
+                        else
+                            zoneData[clean] = data
+                        end
+                        zoneData[itemName] = nil
+                    end
+                end
+            end
+
             ApplyFrameStyle()
             resizer:SetShown(not settings.locked)
 
@@ -1050,14 +1064,22 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "ZONE_CHANGED_NEW_AREA" or event == "ZONE_CHANGED" then
         OnZoneChanged()
     elseif event == "LOOT_CLOSED" then
-        if GetCurrentMapId() == VOIDSTORM_MAP_ID then
+        C_Timer.After(0.1, function()
             isFishing = false
-        end
+        end)
     elseif event == "PLAYER_LOGOUT" then
         if session.fishStart then
             local delta = GetTime() - session.fishStart
             settings.totalFishingTime = (settings.totalFishingTime or 0) + delta
             session.fishStart = nil
+        end
+    elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
+        local unit = ...
+        if unit == "player" then
+            local name = UnitChannelInfo("player")
+            if name == "Void Hole Fishing" then
+                wasVortexChannel = true
+            end
         end
     elseif event == "PLAYER_REGEN_DISABLED" then
         if session.fishStart then
@@ -1086,17 +1108,7 @@ SlashCmdList["NEMO"] = function(input)
         if settingsFrame:IsShown() then
             settingsFrame:Hide()
         else
-            opacitySlider:SetValue(settings.opacity)
-            opacitySlider.UpdateLabel()
-            scaleSlider:SetValue(settings.scale)
-            scaleSlider.UpdateLabel()
-            lockCheck:SetChecked(settings.locked)
-            totalCheck:SetChecked(settings.showTotal)
-            autoShowCheck:SetChecked(settings.autoShow)
-            autoHideCheck:SetChecked(settings.autoHide)
-            local r, g, b = GetAccent()
-            sTitle:SetTextColor(r, g, b)
-            settingsFrame:Show()
+            OpenSettings()
         end
 
     elseif cmd == "reset" then

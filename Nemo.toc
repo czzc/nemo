@@ -4,6 +4,7 @@
 ## Author: czzc
 ## Version: 1.0.3
 ## SavedVariables: NemoDB
+## X-Curse-Project-ID: 1479679
 ## IconTexture: Interface\Icons\INV_Fishingpole_02
 
 Nemo.lua

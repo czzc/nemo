@@ -1,5 +1,5 @@
 --[[
-    Nemo.lua v1.0
+    Nemo.lua v1.0.4
     
     SLASH COMMANDS:
     /nemo            Toggle the frame
@@ -158,6 +158,15 @@ local function UpdateTimerText()
     else
         sessionText:SetText("")
     end
+end
+
+-- snapshot the current fishing sessions time into session and persistent totals
+local function SnapshotFishingTime()
+    if not session.fishStart then return end
+    local delta = GetTime() - session.fishStart
+    session.totalTime = session.totalTime + delta
+    settings.totalFishingTime = (settings.totalFishingTime or 0) + delta
+    session.fishStart = nil
 end
 
 ---------------------------------------------------------------------------
@@ -361,7 +370,7 @@ local function GetRow(index)
     row:EnableMouse(true)
     row:SetScript("OnEnter", function(self)
         self.highlight:Show()
-        -- Show the item tooltip if tehere's an item name
+        -- Show the item tooltip if there's an item name
         if self.itemName then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(self.itemName)
@@ -803,12 +812,7 @@ local function OnFishingDetected()
         C_Timer.After(settings.hideDelay, function()
             if hideGeneration == myGeneration and settings.autoHide then
                 -- Pause the fishing timer
-                if session.fishStart then
-                    local delta = GetTime() - session.fishStart
-                    session.totalTime = session.totalTime + delta
-                    settings.totalFishingTime = (settings.totalFishingTime or 0) + delta
-                    session.fishStart = nil
-                end
+                SnapshotFishingTime()
                 isFishing = false
                 frame:Hide()
             end
@@ -996,7 +1000,10 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
                 if hadData then
                     DEFAULT_CHAT_FRAME:AddMessage(
                         "|cFF4CBFF0Nemo|r: Migrating v1 data (" .. zoneCount .. " zones)...")
-                    NemoDB = { catches = oldData, settings = {} }
+                    -- NemoDB = { catches = oldData, settings = {} }
+                    wipe(NemoDB)
+                    NemoDB.catches = oldData
+                    NemoDB.settings = {}
                     DEFAULT_CHAT_FRAME:AddMessage(
                         "|cFF4CBFF0Nemo|r: Migration complete.")
                 end
@@ -1013,21 +1020,24 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
                 NemoDB.settings[key] = nil
             end
 
-            settings = NemoDB.settings
-
             for mapId, zoneData in pairs(NemoDB.catches) do
+                local renames = {} -- {oldKey, cleanKey } pairs to process
                 for itemName, data in pairs(zoneData) do
                     local clean = itemName:gsub("%s*|A.-|a", "")
                     if clean ~= itemName then
-                        if zoneData[clean] then
-                            zoneData[clean].count = zoneData[clean].count + data.count
-                        else
-                            zoneData[clean] = data
-                        end
-                        zoneData[itemName] = nil
+                        table.insert(renames, {old = itemName, clean = clean, data = data})
                     end
                 end
+                for _, rename in ipairs(renames) do
+                    if zoneData[rename.clean] then
+                        zoneData[rename.clean].count = zoneData[rename.clean].count + rename.data.count
+                    else
+                        zoneData[rename.clean] = rename.data
+                    end
+                    zoneData[rename.old] = nil
+                end
             end
+            settings = NemoDB.settings
 
             ApplyFrameStyle()
             resizer:SetShown(not settings.locked)
@@ -1068,11 +1078,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             isFishing = false
         end)
     elseif event == "PLAYER_LOGOUT" then
-        if session.fishStart then
-            local delta = GetTime() - session.fishStart
-            settings.totalFishingTime = (settings.totalFishingTime or 0) + delta
-            session.fishStart = nil
-        end
+            SnapshotFishingTime()
     elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
         local unit = ...
         if unit == "player" then
@@ -1082,12 +1088,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             end
         end
     elseif event == "PLAYER_REGEN_DISABLED" then
-        if session.fishStart then
-            local delta = GetTime() - session.fishStart
-            session.totalTime = session.totalTime + delta
-            settings.totalFishingTime = (settings.totalFishingTime or 0) + delta
-            session.fishStart = nil
-        end
+        SnapshotFishingTime()
         if settings.autoHide then
             isFishing = false
             frame:Hide()

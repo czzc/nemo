@@ -1,15 +1,4 @@
---[[
-    Nemo.lua v1.0.6
-    
-    SLASH COMMANDS:
-    /nemo            Toggle the frame
-    /nemo settings   Open settings panel
-    /nemo reset      Wipe all catch data
-    /nemo zone       Show current zone info
-    /nemo session    Show session stats
-    /nemo remove X   Remove item X from all zones
-    /nemo silent     Toggle silent mode (hides frame, glows minimap on catch)
-]]
+-- Nemo.lua
 
 ---------------------------------------------------------------------------
 -- Saved Variables

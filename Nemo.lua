@@ -92,7 +92,6 @@ local QUALITY_COLORS = {
 -- LOCALS
 ---------------------------------------------------------------------------
 local sessionText
-local footerText
 local totalFishingTimeText
 local footerBg
 
@@ -246,7 +245,13 @@ titleText:SetText("Nemo")
 local zoneText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 zoneText:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 10, -2)
 zoneText:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT", -10, -2)
-zoneText:SetFont(NEMO_FONT, 12, "")
+zoneText:SetFont(NEMO_FONT, 14, "")
+
+local zoneTotalCount = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+zoneTotalCount:SetPoint("TOPLEFT", zoneText, "BOTTOMLEFT", 0, -2)
+zoneTotalCount:SetPoint("TOPRIGHT", zoneText, "BOTTOMRIGHT", 0, -2)
+zoneTotalCount:SetFont(NEMO_FONT, 12, "")
+
 
 local closeBtn = CreateFrame("Button", nil, titleBar)
 closeBtn:SetSize(16, 16)
@@ -282,8 +287,8 @@ end)
 
 local sep = frame:CreateTexture(nil, "ARTWORK")
 sep:SetHeight(1)
-sep:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -46)
-sep:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -46)
+sep:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -62)
+sep:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -62)
 sep:SetColorTexture(1, 1, 1, 0.08)
 
 ---------------------------------------------------------------------------
@@ -291,7 +296,7 @@ sep:SetColorTexture(1, 1, 1, 0.08)
 ---------------------------------------------------------------------------
 
 local scrollFrame = CreateFrame("ScrollFrame", "NemoScrollFrame", frame, "UIPanelScrollFrameTemplate")
-scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -50)
+scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -66)
 scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 44)
 
 -- Style the scrollbar to be less obtrusive
@@ -337,7 +342,7 @@ end)
 -- FOOTER STATS
 ---------------------------------------------------------------------------
 local footerFrame = CreateFrame("Frame", nil, frame)
-footerFrame:SetHeight(44)
+footerFrame:SetHeight(38)
 footerFrame:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
 footerFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
 
@@ -345,23 +350,17 @@ footerBg = footerFrame:CreateTexture(nil, "BACKGROUND")
 footerBg:SetAllPoints()
 footerBg:SetColorTexture(0.008, 0.098, 0.27, 0.9)
 
--- Total catches footer (zone totals)
-footerText = footerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-footerText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 28)
-footerText:SetTextColor(0.56, 0.56, 0.56)
-footerText:SetFont(NEMO_FONT, 11, "")
-
 -- Session stats
 sessionText = footerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-sessionText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 16)
+sessionText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 20)
 sessionText:SetTextColor(0.56, 0.56, 0.56)
-sessionText:SetFont(NEMO_FONT, 11, "")
+sessionText:SetFont(NEMO_FONT, 13, "")
 
 -- Total Fishing Time
 totalFishingTimeText = footerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-totalFishingTimeText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 4)
+totalFishingTimeText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 5)
 totalFishingTimeText:SetTextColor(0.56, 0.56, 0.56)
-totalFishingTimeText:SetFont(NEMO_FONT, 11, "")
+totalFishingTimeText:SetFont(NEMO_FONT, 13, "")
 
 ---------------------------------------------------------------------------
 -- ROW RENDERING
@@ -420,12 +419,12 @@ local function GetRow(index)
     row.name:SetPoint("RIGHT", row, "RIGHT", -50, 0)
     row.name:SetJustifyH("LEFT")
     row.name:SetWordWrap(false)
-    row.name:SetFont(NEMO_FONT, 12, "")
+    row.name:SetFont(NEMO_FONT, 14, "")
 
     row.count = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     row.count:SetPoint("RIGHT", row, "RIGHT", -6, 0)
     row.count:SetJustifyH("RIGHT")
-    row.count:SetFont(NEMO_FONT, 12, "")
+    row.count:SetFont(NEMO_FONT, 13, "")
 
     rowPool[index] = row
     return row
@@ -473,7 +472,6 @@ local function RefreshDisplay()
     topStripe:Hide()
 
     titleText:SetTextColor(1, 1, 1)
-    zoneText:SetTextColor(r, g, b)
     fishIcon:SetVertexColor(r, g, b)
     zoneText:SetText(zoneName)
 
@@ -487,7 +485,6 @@ local function RefreshDisplay()
         row.count:SetText("")
         row.itemName = nil
         content:SetHeight(23)
-        footerText:SetText("")
         return
     end
 
@@ -512,9 +509,8 @@ local function RefreshDisplay()
 
     if settings.showTotal then
         local timeStr = FormatFishingTime(GetTotalFishingTime())
-
-        local zoneLine = "Zone: " ..total .. " caught  ·  " .. unique .. " unique"
-        footerText:SetText(zoneLine)
+        zoneTotalCount:SetText("" ..total.. " caught · " .. unique .. "unique")
+        zoneTotalCount:SetTextColor(1, 1, 1)
 
         if session.catches > 0 then
             sessionText:SetText("Session: " .. session.catches .. " caught  ·  " .. timeStr)
@@ -524,7 +520,6 @@ local function RefreshDisplay()
 
         totalFishingTimeText:SetText("Total fishing time: " .. FormatFishingTime(settings.totalFishingTime or 0))
     else
-        footerText:SetText("")
         sessionText:SetText("")
         totalFishingTimeText:SetText("")
     end

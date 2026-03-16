@@ -8,6 +8,7 @@
     /nemo zone       Show current zone info
     /nemo session    Show session stats
     /nemo remove X   Remove item X from all zones
+    /nemo silent     Toggle silent mode (hides frame, glows minimap on catch)
 ]]
 
 ---------------------------------------------------------------------------
@@ -31,7 +32,8 @@ local DEFAULT_SETTINGS = {
     anchorPoint    = nil,
     anchorX        = nil,
     anchorY        = nil,
-    totalFishingTime = 0
+    totalFishingTime = 0,
+    showMinimap      = true,
 }
 
 -- Accent color presets for the picker
@@ -64,13 +66,16 @@ local isFishing = false
 local hideGeneration = 0
 local settings
 local wasVortexChannel = false
+local silentMode = false
+local silentCatches = {}  -- { [itemName] = count } accumulated while silent mode is on
 
 -- Session tracking (resets each login)
 local session = {
-    catches    = 0,       -- Total items caught this session
-    unique     = {},      -- Set of unique item names caught this session
-    fishStart  = nil,     -- GetTime() when current fishing bout started
-    totalTime  = 0,       -- Accumulated fishing time in seconds
+    catches       = 0,       -- Total items caught this session
+    unique        = {},      -- Set of unique item names caught this session
+    fishStart     = nil,     -- GetTime() when current fishing bout started
+    totalTime     = 0,       -- Accumulated fishing time in seconds
+    recentCatches = {},      -- Last 3 catches (name, icon, count) for minimap tooltip
 }
 
 -- Spell IDs for standard fishing casts
@@ -93,11 +98,20 @@ local QUALITY_COLORS = {
 ---------------------------------------------------------------------------
 local sessionText
 local totalFishingTimeText
+local FlashMinimapIcon
+local PrintSessionSummary
 local footerBg
 
 ---------------------------------------------------------------------------
 -- HELPERS
 ---------------------------------------------------------------------------
+
+local function RecordRecentCatch(name, icon, count)
+    table.insert(session.recentCatches, 1, { name = name, icon = icon, count = count })
+    if #session.recentCatches > 3 then
+        session.recentCatches[4] = nil
+    end
+end
 
 local function GetCurrentMapId()
     return C_Map.GetBestMapForUnit("player")
@@ -182,6 +196,11 @@ frame:SetResizeBounds(220, 200, 500, 700)
 frame:SetFrameStrata("MEDIUM")
 frame:Hide()
 
+local topStripe = frame:CreateTexture(nil, "OVERLAY")
+topStripe:SetHeight(2)
+topStripe:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+topStripe:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
+
 local function ApplyFrameStyle()
     local r, g, b = GetAccent()
 
@@ -193,18 +212,16 @@ local function ApplyFrameStyle()
     })
 
     frame:SetBackdropColor(0, 0, 0, settings.opacity)
-    frame:SetBackdropBorderColor(r, g, b, 0.4)
+    frame:SetBackdropBorderColor(0, 0, 0, settings.opacity)
     frame:SetScale(settings.scale)
     frame:SetSize(settings.frameWidth, settings.frameHeight)
 
     footerBg:SetAlpha(settings.opacity)
+
+    topStripe:SetColorTexture(r, g, b)
 end
 
-local topStripe = frame:CreateTexture(nil, "OVERLAY")
-topStripe:SetHeight(2)
-topStripe:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
-topStripe:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
-topStripe:SetColorTexture(0.3, 0.75, 0.95, 0.8)
+
 
 ---------------------------------------------------------------------------
 -- TITLE BAR
@@ -239,7 +256,7 @@ fishIcon:SetTexture("Interface\\AddOns\\Nemo\\Textures\\hook")
 
 local titleText = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 titleText:SetPoint("LEFT", fishIcon, "RIGHT", 6, 0)
-titleText:SetFont(NEMO_FONT, 12, "")
+titleText:SetFont(NEMO_FONT, 16, "")
 titleText:SetText("Nemo")
 
 local zoneText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -474,6 +491,7 @@ local function RefreshDisplay()
     titleText:SetTextColor(1, 1, 1)
     fishIcon:SetVertexColor(r, g, b)
     zoneText:SetText(zoneName)
+    zoneText:SetTextColor(r, g, b)
 
     local catches = GetCurrentZoneCatches()
 
@@ -509,7 +527,7 @@ local function RefreshDisplay()
 
     if settings.showTotal then
         local timeStr = FormatFishingTime(GetTotalFishingTime())
-        zoneTotalCount:SetText("" ..total.. " caught · " .. unique .. "unique")
+        zoneTotalCount:SetText("" ..total.. " caught · " .. unique .. " unique")
         zoneTotalCount:SetTextColor(1, 1, 1)
 
         if session.catches > 0 then
@@ -767,10 +785,16 @@ local function OnLootMessage(event, msg)
 
     session.catches = session.catches + lootCount
     session.unique[itemName] = true
+    RecordRecentCatch(itemName, icon or entry.icon, lootCount)
 
     InvalidateTooltipCache()
 
-    if frame:IsShown() then RefreshDisplay() end
+    if silentMode then
+        silentCatches[itemName] = (silentCatches[itemName] or 0) + lootCount
+        FlashMinimapIcon()
+    elseif frame:IsShown() then
+        RefreshDisplay()
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -809,10 +833,16 @@ local function OnCurrencyMessage(event, msg)
 
     session.catches = session.catches + lootCount
     session.unique[currencyName] = true
+    RecordRecentCatch(currencyName, entry.icon, lootCount)
 
     InvalidateTooltipCache()
-    
-    if frame:IsShown() then RefreshDisplay() end
+
+    if silentMode then
+        silentCatches[currencyName] = (silentCatches[currencyName] or 0) + lootCount
+        FlashMinimapIcon()
+    elseif frame:IsShown() then
+        RefreshDisplay()
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -826,7 +856,7 @@ local function OnFishingDetected()
         session.fishStart = GetTime()
     end
 
-    if settings.autoShow and not frame:IsShown() then
+    if not silentMode and settings.autoShow and not frame:IsShown() then
         RefreshDisplay()
         frame:Show()
     end
@@ -869,7 +899,7 @@ local function OnLootReady()
     if wasVortexChannel or (targetName == VORTEX_TARGET_NAME and not IsMounted()) then
         isFishing = true
         wasVortexChannel = false
-        if settings.autoShow and not frame:IsShown() then
+        if not silentMode and settings.autoShow and not frame:IsShown() then
             RefreshDisplay()
             frame:Show()
         end
@@ -986,9 +1016,123 @@ StaticPopupDialogs["NEMO_RESET_CONFIRM"] = {
     end,
     timeout = 0,
     whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3
+    hideOnEscape = true
 }
+
+---------------------------------------------------------------------------
+-- MINIMAP BUTTON (LibDBIcon)
+---------------------------------------------------------------------------
+
+local LDB = LibStub("LibDataBroker-1.1")
+local LDBIcon = LibStub("LibDBIcon-1.0")
+
+local nemoLDB = LDB:NewDataObject("Nemo", {
+    type  = "launcher",
+    icon  = "Interface\\AddOns\\Nemo\\Textures\\hook",
+    label = "Nemo",
+    OnClick = function(_, button)
+        if button == "LeftButton" then
+            if silentMode then
+                PrintSessionSummary()
+            elseif frame:IsShown() then
+                frame:Hide()
+            else
+                RefreshDisplay()
+                frame:Show()
+            end
+        end
+    end,
+    OnTooltipShow = function(tooltip)
+        local r, g, b = GetAccent()
+        tooltip:AddLine("Nemo", r, g, b)
+
+        if #session.recentCatches > 0 then
+            tooltip:AddLine(" ")
+            tooltip:AddLine("Recent catches:", 0.7, 0.7, 0.7)
+            for _, catch in ipairs(session.recentCatches) do
+                tooltip:AddDoubleLine(
+                    "  " .. catch.name,
+                    catch.count .. "x",
+                    1, 1, 1,
+                    0.7, 0.7, 0.7
+                )
+            end
+        else
+            tooltip:AddLine("No catches this session", 0.5, 0.5, 0.5)
+        end
+
+        tooltip:AddLine(" ")
+        tooltip:AddLine("Click to toggle window", 0.5, 0.5, 0.5)
+    end,
+})
+
+local function InitMinimapButton()
+    if not NemoDB.minimap then
+        NemoDB.minimap = { hide = not settings.showMinimap }
+    end
+    LDBIcon:Register("Nemo", nemoLDB, NemoDB.minimap)
+
+    local btn = LDBIcon:GetMinimapButton("Nemo")
+    if btn and btn.icon then
+        -- Always set the minimap icon to gold, regardless of accent color chosen
+        btn.icon:SetVertexColor(0.86, 0.71, 0.19)
+    end
+end
+
+FlashMinimapIcon = function()
+    local btn = LDBIcon:GetMinimapButton("Nemo")
+    if not btn or not btn.icon then return end
+
+    local icon = btn.icon
+    local flashes = 0
+    local maxFlashes = 3
+    local elapsed = 0
+    local bright = true
+
+    btn:SetScript("OnUpdate", function(self, dt)
+        elapsed = elapsed + dt
+        if elapsed >= 0.3 then
+            elapsed = 0
+            if bright then
+                icon:SetVertexColor(1, 1, 1)
+                bright = false
+            else
+                icon:SetVertexColor(0.86, 0.71, 0.19)
+                bright = true
+                flashes = flashes + 1
+            end
+            if flashes >= maxFlashes then
+                icon:SetVertexColor(0.86, 0.71, 0.19)
+                self:SetScript("OnUpdate", nil)
+            end
+        end
+    end)
+end
+
+PrintSessionSummary = function()
+    local r, g, b = GetAccent()
+    local hex = string.format("%02x%02x%02x", r * 255, g * 255, b * 255)
+
+    -- Count silent mode catches
+    local silentTotal = 0
+    local sorted = {}
+    for name, count in pairs(silentCatches) do
+        silentTotal = silentTotal + count
+        table.insert(sorted, { name = name, count = count })
+    end
+    table.sort(sorted, function(x, y) return x.count > y.count end)
+
+    DEFAULT_CHAT_FRAME:AddMessage(string.format(
+        "|cFF%sNemo|r: Silent mode — %d caught since enabled.",
+        hex, silentTotal))
+
+    for _, catch in ipairs(sorted) do
+        DEFAULT_CHAT_FRAME:AddMessage(string.format(
+            "  |cFF%s·|r %s x%d", hex, catch.name, catch.count))
+    end
+
+    DEFAULT_CHAT_FRAME:AddMessage("|cFF888888Type /nemo silent to disable silent mode.|r")
+end
 
 ---------------------------------------------------------------------------
 -- INIT
@@ -1074,6 +1218,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             else
                 frame:SetPoint("RIGHT", UIParent, "RIGHT", -40, 0)
             end
+
+            InitMinimapButton()
 
             local zoneCount = 0
             for _ in pairs(NemoDB.catches) do zoneCount = zoneCount + 1 end
@@ -1174,6 +1320,20 @@ SlashCmdList["NEMO"] = function(input)
                 "|cFF4CBFF0Nemo|r: \"%s\" not found in any zone. (Name is case-sensitive!)", itemName))
         end
 
+    elseif cmd == "silent" then
+        silentMode = not silentMode
+        local r, g, b = GetAccent()
+        local hex = string.format("%02x%02x%02x", r * 255, g * 255, b * 255)
+        if silentMode then
+            wipe(silentCatches)
+            frame:Hide()
+            DEFAULT_CHAT_FRAME:AddMessage(
+                "|cFF" .. hex .. "Nemo|r: Silent mode |cFF00FF00enabled|r. Window hidden, minimap icon will flash on catches.")
+        else
+            DEFAULT_CHAT_FRAME:AddMessage(
+                "|cFF" .. hex .. "Nemo|r: Silent mode |cFFFF4444disabled|r. Normal mode restored.")
+        end
+
     elseif cmd == "session" then
         local timeStr = FormatFishingTime(GetTotalFishingTime())
         local sessionUnique = 0
@@ -1184,7 +1344,9 @@ SlashCmdList["NEMO"] = function(input)
             session.catches, sessionUnique, timeStr))
 
     else
-        if frame:IsShown() then
+        if silentMode then
+            PrintSessionSummary()
+        elseif frame:IsShown() then
             frame:Hide()
         else
             RefreshDisplay()

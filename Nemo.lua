@@ -22,7 +22,7 @@ local DEFAULT_SETTINGS = {
     frameWidth     = 280,
     frameHeight    = 360,
     locked         = false,
-    accentColor    = { 0.30, 0.75, 0.95 },
+    accentColor    = { 0.86, 0.71, 0.19 },
     showTotal      = true,
     autoShow       = true,
     autoHide       = true,
@@ -40,12 +40,13 @@ local COLOR_PRESETS = {
     { name = "Ember",    color = { 0.95, 0.45, 0.25 } },
     { name = "Jade",     color = { 0.30, 0.85, 0.55 } },
     { name = "Violet",   color = { 0.65, 0.40, 0.95 } },
-    { name = "Gold",     color = { 0.94, 0.76, 0.20 } },
     { name = "Rose",     color = { 0.92, 0.45, 0.60 } },
     { name = "Frost",    color = { 0.70, 0.88, 0.95 } },
     { name = "Blood",    color = { 0.85, 0.15, 0.20 } },
+    { name = "Gold",     color = { 0.86, 0.71, 0.19 } }
 }
 
+local NEMO_FONT = "Fonts\\ARIALN.TTF"
 ---------------------------------------------------------------------------
 -- CONSTANTS
 ---------------------------------------------------------------------------
@@ -93,6 +94,7 @@ local QUALITY_COLORS = {
 local sessionText
 local footerText
 local totalFishingTimeText
+local footerBg
 
 ---------------------------------------------------------------------------
 -- HELPERS
@@ -114,7 +116,7 @@ end
 -- Returns the user's chosen accent color (r, g, b)
 -- Falls back to default blue if settings haven't loaded yet
 local function GetAccent()
-    if not settings then return 0.30, 0.75, 0.95 end
+    if not settings then return 0.86, 0.71, 0.19 end
     return settings.accentColor[1], settings.accentColor[2], settings.accentColor[3]
 end
 
@@ -191,10 +193,12 @@ local function ApplyFrameStyle()
         insets   = { left = 1, right = 1, top = 1, bottom = 1 },
     })
 
-    frame:SetBackdropColor(0.06, 0.06, 0.10, settings.opacity)
+    frame:SetBackdropColor(0, 0, 0, settings.opacity)
     frame:SetBackdropBorderColor(r, g, b, 0.4)
     frame:SetScale(settings.scale)
     frame:SetSize(settings.frameWidth, settings.frameHeight)
+
+    footerBg:SetAlpha(settings.opacity)
 end
 
 local topStripe = frame:CreateTexture(nil, "OVERLAY")
@@ -225,33 +229,41 @@ titleBar:SetScript("OnDragStop", function()
     settings.anchorY = y
 end)
 
+local titleBg = titleBar:CreateTexture(nil, "BACKGROUND")
+titleBg:SetAllPoints()
+titleBg:SetColorTexture(0.008, 0.098, 0.27, 1)
+
 local fishIcon = titleBar:CreateTexture(nil, "ARTWORK")
 fishIcon:SetSize(16, 16)
 fishIcon:SetPoint("LEFT", titleBar, "LEFT", 10, 0)
-fishIcon:SetTexture("Interface\\Icons\\INV_Fishingpole_02")
-fishIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92) -- Trim icon borders
+fishIcon:SetTexture("Interface\\AddOns\\Nemo\\Textures\\hook")
 
 local titleText = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 titleText:SetPoint("LEFT", fishIcon, "RIGHT", 6, 0)
+titleText:SetFont(NEMO_FONT, 12, "")
 titleText:SetText("Nemo")
 
 local zoneText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 zoneText:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 10, -2)
 zoneText:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT", -10, -2)
+zoneText:SetFont(NEMO_FONT, 12, "")
 
 local closeBtn = CreateFrame("Button", nil, titleBar)
 closeBtn:SetSize(16, 16)
 closeBtn:SetPoint("RIGHT", titleBar, "RIGHT", -8, 0)
-closeBtn:SetNormalFontObject("GameFontNormalSmall")
-closeBtn:SetHighlightFontObject("GameFontHighlightSmall")
-closeBtn:SetText("x")
-closeBtn:GetFontString():SetTextColor(0.5, 0.5, 0.5)
 closeBtn:SetScript("OnClick", function() frame:Hide() end)
-closeBtn:SetScript("OnEnter", function(self)
-    self:GetFontString():SetTextColor(1, 0.3, 0.3)
+
+local closeIcon = closeBtn:CreateTexture(nil, "ARTWORK")
+closeIcon:SetAllPoints()
+closeIcon:SetTexture("Interface\\AddOns\\Nemo\\Textures\\close")
+closeIcon:SetVertexColor(0.5, 0.5, 0.5)
+
+closeBtn:SetScript("OnEnter", function()
+    closeIcon:SetVertexColor(1, 0.3, 0.3)
 end)
-closeBtn:SetScript("OnLeave", function(self)
-    self:GetFontString():SetTextColor(0.5, 0.5, 0.5)
+
+closeBtn:SetScript("OnLeave", function()
+    closeIcon:SetVertexColor(0.5, 0.5, 0.5)
 end)
 
 local gearBtn = CreateFrame("Button", nil, titleBar)
@@ -259,17 +271,13 @@ gearBtn:SetSize(16, 16)
 gearBtn:SetPoint("RIGHT", closeBtn, "LEFT", -6, 0)
 local gearIcon = gearBtn:CreateTexture(nil, "ARTWORK")
 gearIcon:SetAllPoints()
-gearIcon:SetTexture("Interface\\Icons\\INV_Misc_Gear_01")
-gearIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-gearIcon:SetDesaturated(true)
+gearIcon:SetTexture("Interface\\AddOns\\Nemo\\Textures\\settings")
 gearIcon:SetVertexColor(0.6, 0.6, 0.6)
 gearBtn:SetScript("OnEnter", function()
     gearIcon:SetVertexColor(1, 1, 1)
-    gearIcon:SetDesaturated(false)
 end)
 gearBtn:SetScript("OnLeave", function()
     gearIcon:SetVertexColor(0.6, 0.6, 0.6)
-    gearIcon:SetDesaturated(true)
 end)
 
 local sep = frame:CreateTexture(nil, "ARTWORK")
@@ -284,12 +292,13 @@ sep:SetColorTexture(1, 1, 1, 0.08)
 
 local scrollFrame = CreateFrame("ScrollFrame", "NemoScrollFrame", frame, "UIPanelScrollFrameTemplate")
 scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -50)
-scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -26, 44)
+scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 44)
 
 -- Style the scrollbar to be less obtrusive
 local scrollBar = NemoScrollFrameScrollBar
 if scrollBar then
-    scrollBar:SetWidth(8)
+    scrollBar:Hide()
+    scrollBar.Show = function() end -- Override show so nothing can bring it back
 end
 
 local content = CreateFrame("Frame", nil, scrollFrame)
@@ -297,7 +306,7 @@ content:SetSize(240, 1)
 scrollFrame:SetScrollChild(content)
 
 frame:SetScript("OnSizeChanged", function(self, width, height)
-    content:SetWidth(width - 34)
+    content:SetWidth(width - 12)
 end)
 
 ---------------------------------------------------------------------------
@@ -307,9 +316,12 @@ end)
 local resizer = CreateFrame("Button", nil, frame)
 resizer:SetSize(16, 16)
 resizer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
-resizer:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
-resizer:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
-resizer:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+
+local resizeIcon = resizer:CreateTexture(nil, "ARTWORK")
+resizeIcon:SetAllPoints()
+resizeIcon:SetTexture("Interface\\AddOns\\Nemo\\Textures\\resize")
+resizeIcon:SetVertexColor(0.4, 0.4, 0.4)
+
 resizer:SetScript("OnMouseDown", function()
     if not settings.locked then
         frame:StartSizing("BOTTOMRIGHT")
@@ -324,20 +336,32 @@ end)
 ---------------------------------------------------------------------------
 -- FOOTER STATS
 ---------------------------------------------------------------------------
+local footerFrame = CreateFrame("Frame", nil, frame)
+footerFrame:SetHeight(44)
+footerFrame:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+footerFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+
+footerBg = footerFrame:CreateTexture(nil, "BACKGROUND")
+footerBg:SetAllPoints()
+footerBg:SetColorTexture(0.008, 0.098, 0.27, 0.9)
+
 -- Total catches footer (zone totals)
-footerText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+footerText = footerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 footerText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 28)
-footerText:SetTextColor(0.4, 0.4, 0.4)
+footerText:SetTextColor(0.56, 0.56, 0.56)
+footerText:SetFont(NEMO_FONT, 11, "")
 
 -- Session stats
-sessionText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+sessionText = footerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 sessionText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 16)
-sessionText:SetTextColor(0.35, 0.35, 0.35)
+sessionText:SetTextColor(0.56, 0.56, 0.56)
+sessionText:SetFont(NEMO_FONT, 11, "")
 
 -- Total Fishing Time
-totalFishingTimeText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+totalFishingTimeText = footerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 totalFishingTimeText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 4)
-totalFishingTimeText:SetTextColor(0.35, 0.35, 0.35)
+totalFishingTimeText:SetTextColor(0.56, 0.56, 0.56)
+totalFishingTimeText:SetFont(NEMO_FONT, 11, "")
 
 ---------------------------------------------------------------------------
 -- ROW RENDERING
@@ -396,10 +420,12 @@ local function GetRow(index)
     row.name:SetPoint("RIGHT", row, "RIGHT", -50, 0)
     row.name:SetJustifyH("LEFT")
     row.name:SetWordWrap(false)
+    row.name:SetFont(NEMO_FONT, 12, "")
 
     row.count = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     row.count:SetPoint("RIGHT", row, "RIGHT", -6, 0)
     row.count:SetJustifyH("RIGHT")
+    row.count:SetFont(NEMO_FONT, 12, "")
 
     rowPool[index] = row
     return row
@@ -443,8 +469,12 @@ local function RefreshDisplay()
     local r, g, b = GetAccent()
 
     topStripe:SetColorTexture(r, g, b, 0.8)
-    titleText:SetTextColor(r, g, b)
-    zoneText:SetTextColor(0.55, 0.55, 0.55)
+    -- Hiding for now
+    topStripe:Hide()
+
+    titleText:SetTextColor(1, 1, 1)
+    zoneText:SetTextColor(r, g, b)
+    fishIcon:SetVertexColor(r, g, b)
     zoneText:SetText(zoneName)
 
     local catches = GetCurrentZoneCatches()

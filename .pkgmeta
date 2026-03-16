@@ -1,5 +1,7 @@
 package-as: Nemo
 
+manual-changelog: CHANGELOG.md
+
 ignore:
 
 - screenshots

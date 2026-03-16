@@ -1,5 +1,5 @@
 --[[
-    Nemo.lua v1.0.4
+    Nemo.lua v1.0.6
     
     SLASH COMMANDS:
     /nemo            Toggle the frame
@@ -68,6 +68,7 @@ local settings
 local wasVortexChannel = false
 local silentMode = false
 local silentCatches = {}  -- { [itemName] = count } accumulated while silent mode is on
+local fishingLootOpen = false
 
 -- Session tracking (resets each login)
 local session = {
@@ -156,6 +157,16 @@ local function FormatFishingTime(seconds)
     end
 end
 
+local function FormatNumber(n)
+    local formatted = tostring(n)
+    local k
+    while true do
+        formatted, k = formatted:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
+        if k == 0 then break end
+    end
+    return formatted
+end
+
 local function GetTotalFishingTime()
     local fishTime = session.totalTime
     if session.fishStart then
@@ -169,7 +180,7 @@ local function UpdateTimerText()
 
     if session.catches > 0 then
         local timeStr = FormatFishingTime(GetTotalFishingTime())    
-        sessionText:SetText("Session: " .. session.catches .. " caught  ·  " .. timeStr)
+        sessionText:SetText("Session: " .. FormatNumber(session.catches) .. " caught  ·  " .. timeStr)
     else
         sessionText:SetText("")
     end
@@ -410,13 +421,19 @@ local function GetRow(index)
     row:EnableMouse(true)
     row:SetScript("OnEnter", function(self)
         self.highlight:Show()
-        -- Show the item tooltip if there's an item name
         if self.itemName then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(self.itemName)
-            local _, link = C_Item.GetItemInfo(self.itemName)
-            if link then
-                GameTooltip:SetHyperlink(link)
+            if self.itemId then
+                GameTooltip:SetItemByID(self.itemId)
+            elseif self.currencyId then
+                GameTooltip:SetCurrencyByID(self.currencyId) --[[@as any]]
+            else
+                -- Fallback for old data without stored IDs
+                GameTooltip:SetText(self.itemName)
+                local _, link = C_Item.GetItemInfo(self.itemName)
+                if link then
+                    GameTooltip:SetHyperlink(link)
+                end
             end
             GameTooltip:Show()
         end
@@ -467,6 +484,8 @@ local function GetCurrentZoneCatches()
             name = itemName, count = data.count or 0,
             icon = data.icon or "Interface\\Icons\\INV_Misc_QuestionMark",
             quality = data.quality or 1,
+            itemId = data.itemId,
+            currencyId = data.currencyId,
         })
     end
 
@@ -515,11 +534,13 @@ local function RefreshDisplay()
         row.icon:SetTexture(catch.icon)
         row.name:SetText(catch.name)
         row.itemName = catch.name
+        row.itemId = catch.itemId
+        row.currencyId = catch.currencyId
 
         local color = QUALITY_COLORS[catch.quality] or QUALITY_COLORS[1]
         row.name:SetTextColor(color[1], color[2], color[3])
 
-        row.count:SetText(catch.count)
+        row.count:SetText(FormatNumber(catch.count))
         row.count:SetTextColor(r, g, b, 0.9)
     end
 
@@ -527,11 +548,11 @@ local function RefreshDisplay()
 
     if settings.showTotal then
         local timeStr = FormatFishingTime(GetTotalFishingTime())
-        zoneTotalCount:SetText("" ..total.. " caught · " .. unique .. " unique")
+        zoneTotalCount:SetText(FormatNumber(total) .. " caught · " .. FormatNumber(unique) .. " unique")
         zoneTotalCount:SetTextColor(1, 1, 1)
 
         if session.catches > 0 then
-            sessionText:SetText("Session: " .. session.catches .. " caught  ·  " .. timeStr)
+            sessionText:SetText("Session: " .. FormatNumber(session.catches) .. " caught  ·  " .. timeStr)
         else
             sessionText:SetText("")
         end
@@ -703,11 +724,52 @@ end)
 local autoHideCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
 autoHideCheck:SetSize(24, 24)
 autoHideCheck:SetPoint("TOPLEFT", 12, -302)
-autoHideCheck.text:SetText(" Auto-hide after 45s / on combat")
+autoHideCheck.text:SetText(" Auto-hide after idle / on combat")
 autoHideCheck.text:SetFontObject("GameFontNormalSmall")
 autoHideCheck.text:SetTextColor(0.8, 0.8, 0.8)
+
+-- Hide delay slider (nested under auto-hide)
+local hideDelayContainer = CreateFrame("Frame", nil, settingsFrame)
+hideDelayContainer:SetSize(240, 40)
+hideDelayContainer:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 36, -326)
+
+local hideDelayLabel = hideDelayContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+hideDelayLabel:SetPoint("TOPLEFT", 0, 0)
+hideDelayLabel:SetTextColor(0.6, 0.6, 0.6)
+
+local hideDelaySlider = CreateFrame("Slider", nil, hideDelayContainer, "OptionsSliderTemplate")
+hideDelaySlider:SetPoint("TOPLEFT", 0, -14)
+hideDelaySlider:SetSize(220, 14)
+hideDelaySlider:SetMinMaxValues(25, 120)
+hideDelaySlider:SetValueStep(5)
+hideDelaySlider:SetObeyStepOnDrag(true)
+hideDelaySlider.Low:SetText("")
+hideDelaySlider.High:SetText("")
+
+local function UpdateHideDelayLabel()
+    hideDelayLabel:SetText("Auto-hide delay: " .. string.format("%.0fs", hideDelaySlider:GetValue()))
+end
+
+hideDelaySlider:SetScript("OnValueChanged", function(self, value)
+    settings.hideDelay = value
+    UpdateHideDelayLabel()
+end)
+
+local function SetHideDelayVisible(show)
+    if show then
+        hideDelayContainer:Show()
+        settingsFrame:SetHeight(380)
+    else
+        hideDelayContainer:Hide()
+        settingsFrame:SetHeight(340)
+    end
+end
+
+hideDelayContainer:Hide()
+
 autoHideCheck:SetScript("OnClick", function(self)
     settings.autoHide = self:GetChecked()
+    SetHideDelayVisible(settings.autoHide)
 end)
 
 local function OpenSettings()
@@ -719,6 +781,9 @@ local function OpenSettings()
     totalCheck:SetChecked(settings.showTotal)
     autoShowCheck:SetChecked(settings.autoShow)
     autoHideCheck:SetChecked(settings.autoHide)
+    hideDelaySlider:SetValue(settings.hideDelay)
+    UpdateHideDelayLabel()
+    SetHideDelayVisible(settings.autoHide)
     local r,g,b = GetAccent()
     sTitle:SetTextColor(r,g,b)
     settingsFrame:Show()
@@ -762,6 +827,7 @@ local function OnLootMessage(event, msg)
     local countStr = msg:match("x(%d+)")
     local lootCount = tonumber(countStr) or 1
 
+    local itemId = tonumber(itemLink:match("item:(%d+)"))
     local _, _, quality, _, _, _, _, _, _, icon = C_Item.GetItemInfo(itemLink)
 
     local mapId = GetCurrentMapId()
@@ -782,6 +848,7 @@ local function OnLootMessage(event, msg)
     entry.count = entry.count + lootCount
     if icon then entry.icon = icon end
     if quality then entry.quality = quality end
+    if itemId then entry.itemId = itemId end
 
     session.catches = session.catches + lootCount
     session.unique[itemName] = true
@@ -811,6 +878,16 @@ local function OnCurrencyMessage(event, msg)
     local currencyName = msg:match("%[(.-)%]")
     if not currencyName then return end
 
+    local currencyIdStr = msg:match("|Hcurrency:(%d+)")
+    local icon, quality
+    if currencyIdStr then
+        local info = C_CurrencyInfo.GetCurrencyInfo(tonumber(currencyIdStr) --[[@as number]])
+        if info then
+            icon = info.iconFileID
+            quality = info.quality or 1
+        end
+    end
+
     local countStr = msg:match("x(%d+)")
     local lootCount = tonumber(countStr) or 1
 
@@ -823,13 +900,16 @@ local function OnCurrencyMessage(event, msg)
     if not NemoDB.catches[mapId][currencyName] then
         NemoDB.catches[mapId][currencyName] = {
             count = 0,
-            icon = "Interface\\Icons\\INV_Misc_QuestionMark",
-            quality = 1,
+            icon = icon or "Interface\\Icons\\INV_Misc_QuestionMark",
+            quality = quality or 1,
         }
     end
 
     local entry = NemoDB.catches[mapId][currencyName]
     entry.count = entry.count + lootCount
+    if icon then entry.icon = icon end
+    if quality then entry.quality = quality end
+    if currencyIdStr then entry.currencyId = tonumber(currencyIdStr) end
 
     session.catches = session.catches + lootCount
     session.unique[currencyName] = true
@@ -851,6 +931,7 @@ end
 
 local function OnFishingDetected()
     isFishing = true
+    fishingLootOpen = true
 
     if not session.fishStart then
         session.fishStart = GetTime()
@@ -898,6 +979,7 @@ local function OnLootReady()
 
     if wasVortexChannel or (targetName == VORTEX_TARGET_NAME and not IsMounted()) then
         isFishing = true
+        fishingLootOpen = true
         wasVortexChannel = false
         if not silentMode and settings.autoShow and not frame:IsShown() then
             RefreshDisplay()
@@ -974,7 +1056,7 @@ local function OnTooltipSetItem(tooltip, data)
     for _, zone in ipairs(zones) do
         tooltip:AddDoubleLine(
             "  " .. zone.name,
-            zone.count .. "x",
+            FormatNumber(zone.count) .. "x",
             0.7, 0.7, 0.7,
             r, g, b
         )
@@ -985,7 +1067,7 @@ local function OnTooltipSetItem(tooltip, data)
     if #zones > 1 then
         tooltip:AddDoubleLine(
             "  Total",
-            total .. "x",
+            FormatNumber(total) .. "x",
             0.5, 0.5, 0.5,
             0.5, 0.5, 0.5
         )
@@ -1052,7 +1134,7 @@ local nemoLDB = LDB:NewDataObject("Nemo", {
             for _, catch in ipairs(session.recentCatches) do
                 tooltip:AddDoubleLine(
                     "  " .. catch.name,
-                    catch.count .. "x",
+                    FormatNumber(catch.count) .. "x",
                     1, 1, 1,
                     0.7, 0.7, 0.7
                 )
@@ -1062,7 +1144,12 @@ local nemoLDB = LDB:NewDataObject("Nemo", {
         end
 
         tooltip:AddLine(" ")
-        tooltip:AddLine("Click to toggle window", 0.5, 0.5, 0.5)
+        if silentMode then
+            tooltip:AddLine("Silent mode active", 0.4, 0.8, 0.4)
+            tooltip:AddLine("Click to print session stats", 0.5, 0.5, 0.5)
+        else
+            tooltip:AddLine("Click to toggle window", 0.5, 0.5, 0.5)
+        end
     end,
 })
 
@@ -1123,12 +1210,12 @@ PrintSessionSummary = function()
     table.sort(sorted, function(x, y) return x.count > y.count end)
 
     DEFAULT_CHAT_FRAME:AddMessage(string.format(
-        "|cFF%sNemo|r: Silent mode — %d caught since enabled.",
-        hex, silentTotal))
+        "|cFF%sNemo|r: Silent mode - %s caught since enabled.",
+        hex, FormatNumber(silentTotal)))
 
     for _, catch in ipairs(sorted) do
         DEFAULT_CHAT_FRAME:AddMessage(string.format(
-            "  |cFF%s·|r %s x%d", hex, catch.name, catch.count))
+            "  |cFF%s·|r %s x%s", hex, catch.name, FormatNumber(catch.count)))
     end
 
     DEFAULT_CHAT_FRAME:AddMessage("|cFF888888Type /nemo silent to disable silent mode.|r")
@@ -1169,7 +1256,6 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
                 if hadData then
                     DEFAULT_CHAT_FRAME:AddMessage(
                         "|cFF4CBFF0Nemo|r: Migrating v1 data (" .. zoneCount .. " zones)...")
-                    -- NemoDB = { catches = oldData, settings = {} }
                     wipe(NemoDB)
                     NemoDB.catches = oldData
                     NemoDB.settings = {}
@@ -1245,9 +1331,12 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "ZONE_CHANGED_NEW_AREA" or event == "ZONE_CHANGED" then
         OnZoneChanged()
     elseif event == "LOOT_CLOSED" then
-        C_Timer.After(0.1, function()
-            isFishing = false
-        end)
+        if fishingLootOpen then
+            C_Timer.After(0.1, function()
+                isFishing = false
+                fishingLootOpen = false
+            end)
+        end
     elseif event == "PLAYER_LOGOUT" then
             SnapshotFishingTime()
     elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
@@ -1340,8 +1429,8 @@ SlashCmdList["NEMO"] = function(input)
         for _ in pairs(session.unique) do sessionUnique = sessionUnique + 1 end
 
         DEFAULT_CHAT_FRAME:AddMessage(string.format(
-            "|cFF4CBFF0Nemo|r: Session - %d caught, %d unique, %s fishing",
-            session.catches, sessionUnique, timeStr))
+            "|cFF4CBFF0Nemo|r: Session - %s caught, %s unique, %s fishing",
+            FormatNumber(session.catches), FormatNumber(sessionUnique), timeStr))
 
     else
         if silentMode then

@@ -1,6 +1,6 @@
 package-as: Nemo
 
-manual-changelog: CHANGELOG.md
+manual-changelog: CURR_CHANGELOG.md
 
 ignore:
 

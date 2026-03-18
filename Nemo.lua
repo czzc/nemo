@@ -568,7 +568,7 @@ local function RefreshDisplay()
         -- Catch total on the right side of title bar
         zoneTotalCount:SetParent(titleBar)
         zoneTotalCount:ClearAllPoints()
-        zoneTotalCount:SetPoint("RIGHT", titleBar, "RIGHT", -30, 0)
+        zoneTotalCount:SetPoint("RIGHT", restoreBtn, "LEFT", -6, 0)
         zoneTotalCount:SetText(FormatNumber(total) .. " caught")
         zoneTotalCount:SetTextColor(1, 1, 1)
         zoneTotalCount:Show()
@@ -1537,6 +1537,8 @@ SlashCmdList["NEMO"] = function(input)
                 quietMode = false
                 frame:SetHeight(quietModeSavedHeight or settings.frameHeight)
                 quietModeSavedHeight = nil
+                resizer:SetShown(not settings.locked)
+                RefreshDisplay()
             end
             wipe(silentCatches)
             frame:Hide()

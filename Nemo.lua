@@ -57,6 +57,8 @@ local settings
 local wasVortexChannel = false
 local silentMode = false
 local silentCatches = {}  -- { [itemName] = count } accumulated while silent mode is on
+local quietMode = false
+local quietModeSavedHeight = nil
 local fishingLootOpen = false
 
 -- Session tracking (resets each login)
@@ -81,6 +83,11 @@ local QUALITY_COLORS = {
     [3] = { 0.00, 0.44, 0.87 },   -- Rare (blue)
     [4] = { 0.64, 0.21, 0.93 },   -- Epic (purple)
     [5] = { 1.00, 0.50, 0.00 },   -- Legendary (orange)
+}
+
+-- Items to ignore when fishing (auto-awarded, not actual catches)
+local ITEM_BLACKLIST = {
+    ["Community Coupon"] = true,
 }
 
 ---------------------------------------------------------------------------
@@ -211,10 +218,11 @@ local function ApplyFrameStyle()
         insets   = { left = 1, right = 1, top = 1, bottom = 1 },
     })
 
-    frame:SetBackdropColor(0, 0, 0, settings.opacity)
-    frame:SetBackdropBorderColor(0, 0, 0, settings.opacity)
+    frame:SetBackdropColor(0, 0, 0, quietMode and 0 or settings.opacity)
+    frame:SetBackdropBorderColor(0, 0, 0, quietMode and 0 or settings.opacity)
     frame:SetScale(settings.scale)
-    frame:SetSize(settings.frameWidth, settings.frameHeight)
+    frame:SetWidth(settings.frameWidth)
+    frame:SetHeight(quietMode and 28 or settings.frameHeight)
 
     footerBg:SetAlpha(settings.opacity)
 
@@ -301,6 +309,30 @@ end)
 gearBtn:SetScript("OnLeave", function()
     gearIcon:SetVertexColor(0.6, 0.6, 0.6)
 end)
+
+-- Minimize button (normal mode → quiet mode)
+local minimizeBtn = CreateFrame("Button", nil, titleBar)
+minimizeBtn:SetSize(20, 16)
+minimizeBtn:SetPoint("RIGHT", gearBtn, "LEFT", -4, 0)
+local minimizeText = minimizeBtn:CreateFontString(nil, "OVERLAY")
+minimizeText:SetAllPoints()
+minimizeText:SetFont(NEMO_FONT, 13, "OUTLINE")
+minimizeText:SetText("[–]")
+minimizeText:SetTextColor(0.5, 0.5, 0.5)
+minimizeBtn:SetScript("OnEnter", function() minimizeText:SetTextColor(1, 1, 1) end)
+minimizeBtn:SetScript("OnLeave", function() minimizeText:SetTextColor(0.5, 0.5, 0.5) end)
+
+-- Restore button (quiet mode → normal mode), parented to titleBar
+local restoreBtn = CreateFrame("Button", nil, titleBar)
+restoreBtn:SetSize(20, 16)
+local restoreText = restoreBtn:CreateFontString(nil, "OVERLAY")
+restoreText:SetAllPoints()
+restoreText:SetFont(NEMO_FONT, 13, "OUTLINE")
+restoreText:SetText("[+]")
+restoreText:SetTextColor(0.5, 0.5, 0.5)
+restoreBtn:SetScript("OnEnter", function() restoreText:SetTextColor(1, 1, 1) end)
+restoreBtn:SetScript("OnLeave", function() restoreText:SetTextColor(0.5, 0.5, 0.5) end)
+restoreBtn:Hide()
 
 local sep = frame:CreateTexture(nil, "ARTWORK")
 sep:SetHeight(1)
@@ -503,39 +535,105 @@ local function RefreshDisplay()
 
     local catches = GetCurrentZoneCatches()
 
-    if #catches == 0 then
-        local row = GetRow(1)
-        row.icon:SetTexture("Interface\\Icons\\INV_Misc_Fish_02")
-        row.name:SetText("No catches here yet...")
-        row.name:SetTextColor(0.4, 0.4, 0.4)
-        row.count:SetText("")
-        row.itemName = nil
-        content:SetHeight(23)
-        return
-    end
-
     local total = 0
     local unique = #catches
     for _, c in ipairs(catches) do total = total + c.count end
 
-    for i, catch in ipairs(catches) do
-        local row = GetRow(i)
-        row.icon:SetTexture(catch.icon)
-        row.name:SetText(catch.name)
-        row.itemName = catch.name
-        row.itemId = catch.itemId
-        row.currencyId = catch.currencyId
+    if quietMode then
+        -- Hide everything except the title bar
+        frame:SetBackdropColor(0, 0, 0, 0)
+        frame:SetBackdropBorderColor(0, 0, 0, 0)
+        scrollFrame:Hide()
+        sep:Hide()
+        resizer:Hide()
+        footerFrame:Hide()
+        titleText:Hide()
+        gearBtn:Hide()
+        closeBtn:Hide()
+        minimizeBtn:Hide()
 
-        local color = QUALITY_COLORS[catch.quality] or QUALITY_COLORS[1]
-        row.name:SetTextColor(color[1], color[2], color[3])
+        -- Restyle title bar for compact mode
+        titleBg:SetColorTexture(0.008, 0.098, 0.27, 1)
+        fishIcon:SetVertexColor(r, g, b)
+        fishIcon:SetAlpha(1.0)
 
-        row.count:SetText(FormatNumber(catch.count))
-        row.count:SetTextColor(r, g, b, 0.9)
+        -- Re-parent text onto titleBar so it draws above titleBg
+        zoneText:SetParent(titleBar)
+        zoneText:ClearAllPoints()
+        zoneText:SetPoint("LEFT", fishIcon, "RIGHT", 6, 0)
+        zoneText:SetText(zoneName)
+        zoneText:SetTextColor(r, g, b)
+        zoneText:Show()
+
+        -- Catch total on the right side of title bar
+        zoneTotalCount:SetParent(titleBar)
+        zoneTotalCount:ClearAllPoints()
+        zoneTotalCount:SetPoint("RIGHT", restoreBtn, "LEFT", -6, 0)
+        zoneTotalCount:SetText(FormatNumber(total) .. " caught")
+        zoneTotalCount:SetTextColor(1, 1, 1)
+        zoneTotalCount:Show()
+
+        -- Show restore [+] button at the right edge of the bar
+        restoreBtn:ClearAllPoints()
+        restoreBtn:SetPoint("RIGHT", titleBar, "RIGHT", -6, 0)
+        restoreBtn:Show()
+    else
+        -- Restore normal layout
+        frame:SetHeight(settings.frameHeight)
+        frame:SetBackdropColor(0, 0, 0, settings.opacity)
+        frame:SetBackdropBorderColor(0, 0, 0, settings.opacity)
+        scrollFrame:Show()
+        sep:Show()
+        footerFrame:Show()
+        footerBg:SetAlpha(settings.opacity)
+        titleText:Show()
+        gearBtn:Show()
+        closeBtn:Show()
+        minimizeBtn:Show()
+        restoreBtn:Hide()
+        titleBg:SetColorTexture(0.008, 0.098, 0.27, 1)
+        fishIcon:SetAlpha(1.0)
+
+        -- Restore text back to main frame
+        zoneText:SetParent(frame)
+        zoneText:ClearAllPoints()
+        zoneText:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 10, -2)
+        zoneText:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT", -10, -2)
+
+        zoneTotalCount:SetParent(frame)
+        -- Restore zoneTotalCount anchoring
+        zoneTotalCount:ClearAllPoints()
+        zoneTotalCount:SetPoint("TOPLEFT", zoneText, "BOTTOMLEFT", 0, -2)
+        zoneTotalCount:SetPoint("TOPRIGHT", zoneText, "BOTTOMRIGHT", 0, -2)
+
+        if #catches == 0 then
+            local row = GetRow(1)
+            row.icon:SetTexture("Interface\\Icons\\INV_Misc_Fish_02")
+            row.name:SetText("No catches here yet...")
+            row.name:SetTextColor(0.4, 0.4, 0.4)
+            row.count:SetText("")
+            row.itemName = nil
+            content:SetHeight(23)
+        else
+            for i, catch in ipairs(catches) do
+                local row = GetRow(i)
+                row.icon:SetTexture(catch.icon)
+                row.name:SetText(catch.name)
+                row.itemName = catch.name
+                row.itemId = catch.itemId
+                row.currencyId = catch.currencyId
+
+                local color = QUALITY_COLORS[catch.quality] or QUALITY_COLORS[1]
+                row.name:SetTextColor(color[1], color[2], color[3])
+
+                row.count:SetText(FormatNumber(catch.count))
+                row.count:SetTextColor(r, g, b, 0.9)
+            end
+            content:SetHeight(#catches * 23)
+        end
     end
 
-    content:SetHeight(#catches * 23)
-
-    if settings.showTotal then
+    if not quietMode and settings.showTotal then
         local timeStr = FormatFishingTime(GetTotalFishingTime())
         zoneTotalCount:SetText(FormatNumber(total) .. " caught · " .. FormatNumber(unique) .. " unique")
         zoneTotalCount:SetTextColor(1, 1, 1)
@@ -547,13 +645,43 @@ local function RefreshDisplay()
         end
 
         totalFishingTimeText:SetText("Total fishing time: " .. FormatFishingTime(settings.totalFishingTime or 0))
-    else
+    elseif not quietMode then
         sessionText:SetText("")
         totalFishingTimeText:SetText("")
     end
 end
 
 frame.RefreshDisplay = RefreshDisplay
+
+local function ToggleQuietMode()
+    quietMode = not quietMode
+    local r, g, b = GetAccent()
+    local hex = string.format("%02x%02x%02x", r * 255, g * 255, b * 255)
+    if quietMode then
+        if silentMode then
+            silentMode = false
+            wipe(silentCatches)
+        end
+        if not quietModeSavedHeight then
+            quietModeSavedHeight = settings.frameHeight
+        end
+        frame:SetHeight(28)
+        RefreshDisplay()
+        if not frame:IsShown() then frame:Show() end
+        DEFAULT_CHAT_FRAME:AddMessage(
+            "|cFF" .. hex .. "Nemo|r: Quiet mode |cFF00FF00enabled|r. Showing compact view.")
+    else
+        frame:SetHeight(quietModeSavedHeight or settings.frameHeight)
+        quietModeSavedHeight = nil
+        resizer:SetShown(not settings.locked)
+        RefreshDisplay()
+        DEFAULT_CHAT_FRAME:AddMessage(
+            "|cFF" .. hex .. "Nemo|r: Quiet mode |cFFFF4444disabled|r. Full view restored.")
+    end
+end
+
+minimizeBtn:SetScript("OnClick", ToggleQuietMode)
+restoreBtn:SetScript("OnClick", ToggleQuietMode)
 
 ---------------------------------------------------------------------------
 -- SETTINGS PANEL
@@ -811,6 +939,7 @@ local function OnLootMessage(event, msg)
     local itemName = itemLink:match("%[(.-)%]")
     if not itemName then return end
     itemName = itemName:gsub("%s*|A.-|a", "")
+    if ITEM_BLACKLIST[itemName] then return end
 
     -- Check for a stack count (e.g. "x5" at the end)
     local countStr = msg:match("x(%d+)")
@@ -866,6 +995,7 @@ local function OnCurrencyMessage(event, msg)
 
     local currencyName = msg:match("%[(.-)%]")
     if not currencyName then return end
+    if ITEM_BLACKLIST[currencyName] then return end
 
     local currencyIdStr = msg:match("|Hcurrency:(%d+)")
     local icon, quality
@@ -1403,6 +1533,13 @@ SlashCmdList["NEMO"] = function(input)
         local r, g, b = GetAccent()
         local hex = string.format("%02x%02x%02x", r * 255, g * 255, b * 255)
         if silentMode then
+            if quietMode then
+                quietMode = false
+                frame:SetHeight(quietModeSavedHeight or settings.frameHeight)
+                quietModeSavedHeight = nil
+                resizer:SetShown(not settings.locked)
+                RefreshDisplay()
+            end
             wipe(silentCatches)
             frame:Hide()
             DEFAULT_CHAT_FRAME:AddMessage(
@@ -1411,6 +1548,9 @@ SlashCmdList["NEMO"] = function(input)
             DEFAULT_CHAT_FRAME:AddMessage(
                 "|cFF" .. hex .. "Nemo|r: Silent mode |cFFFF4444disabled|r. Normal mode restored.")
         end
+
+    elseif cmd == "quiet" then
+        ToggleQuietMode()
 
     elseif cmd == "session" then
         local timeStr = FormatFishingTime(GetTotalFishingTime())

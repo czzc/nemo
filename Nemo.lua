@@ -41,9 +41,6 @@ local NEMO_FONT = "Fonts\\ARIALN.TTF"
 ---------------------------------------------------------------------------
 -- CONSTANTS
 ---------------------------------------------------------------------------
--- The fishable vortex NPC name (used for LOOT_READY target filtering)
-local VORTEX_TARGET_NAME = "Hyper-Compressed Ocean Target"
-
 ---------------------------------------------------------------------------
 -- STATE
 ---------------------------------------------------------------------------
@@ -1087,9 +1084,10 @@ end
 ---------------------------------------------------------------------------
 
 local function OnLootReady()
-    local targetName = UnitName("target")
-
-    if wasVortexChannel or (targetName == VORTEX_TARGET_NAME and not IsMounted()) then
+    -- UnitName("target") returns a tainted string during LOOT_READY that cannot be
+    -- compared, indexed, or converted. Rely on wasVortexChannel flag instead, which is
+    -- set by UNIT_SPELLCAST_CHANNEL_START when "Void Hole Fishing" is detected.
+    if wasVortexChannel then
         isFishing = true
         fishingLootOpen = true
         wasVortexChannel = false

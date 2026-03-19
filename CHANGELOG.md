@@ -1,3 +1,7 @@
+### v1.1.0
+
+- fix: remove UnitName("target") call in LOOT_READY to resolve taint error
+
 #### v1.0.7
 
 - **Quiet Mode** (`/nemo quiet`) - compact, single-bar HUD showing only the zone name and catch count. Toggle between 'normal' view and 'quiet' mode via [-] / [+] buttons in the title bar, or via slash command. _**Note**: quiet mode and silent mode are mutually exclusive so enabling one will disable the other_

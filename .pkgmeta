@@ -1,7 +1,5 @@
 package-as: Nemo
 
-manual-changelog: CURR_CHANGELOG.md
-
 ignore:
 
 - screenshots

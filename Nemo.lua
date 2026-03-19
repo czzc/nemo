@@ -41,10 +41,6 @@ local NEMO_FONT = "Fonts\\ARIALN.TTF"
 ---------------------------------------------------------------------------
 -- CONSTANTS
 ---------------------------------------------------------------------------
-
--- Voidstorm map ID used for vortex fishing detection
-local VOIDSTORM_MAP_ID = 2405
-
 -- The fishable vortex NPC name (used for LOOT_READY target filtering)
 local VORTEX_TARGET_NAME = "Hyper-Compressed Ocean Target"
 
@@ -1081,8 +1077,8 @@ local function OnSpellcastSucceeded(event, unit, castGUID, spellId)
 end
 
 ---------------------------------------------------------------------------
--- VOIDSTORM VORTEX DETECTION
--- Oceanic Vortexes in voidstorm dont trigger UNIT_SPELLCAST_SUCCEEDED when
+-- VOIDSTORM VORTEX DETECTION (Voidstorm + Angler's Anomaly)
+-- Oceanic Vortexes dont trigger UNIT_SPELLCAST_SUCCEEDED when
 -- interacted with, because of course they dont.  They DO, however, use
 -- UNIT_SPELLCAST_CHANNEL_START when you start 'fishing' from the vortex.
 -- We use this to set a wasVortexChannel flag and then check for it in
@@ -1091,9 +1087,6 @@ end
 ---------------------------------------------------------------------------
 
 local function OnLootReady()
-    local mapId = GetCurrentMapId()
-    if mapId ~= VOIDSTORM_MAP_ID then return end
-
     local targetName = UnitName("target")
 
     if wasVortexChannel or (targetName == VORTEX_TARGET_NAME and not IsMounted()) then

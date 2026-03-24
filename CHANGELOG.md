@@ -1,3 +1,8 @@
+### v1.2.0
+
+- slight re-design of the main window
+- feat: added font selection in the settings window to hopefully aid in supporting more languages
+
 ### v1.1.0
 
 - fix: remove UnitName("target") call in LOOT_READY to resolve taint error

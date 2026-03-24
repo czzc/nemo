@@ -22,7 +22,8 @@ local DEFAULT_SETTINGS = {
     anchorX        = nil,
     anchorY        = nil,
     totalFishingTime = 0,
-    showMinimap      = true,
+    showMinimap    = true,
+    fontKey        = "Friz Quadrata"
 }
 
 -- Accent color presets for the picker
@@ -37,7 +38,7 @@ local COLOR_PRESETS = {
     { name = "Gold",     color = { 0.86, 0.71, 0.19 } }
 }
 
-local NEMO_FONT = "Fonts\\ARIALN.TTF"
+local NEMO_FONT = "Fonts\\FRIZQT__.TTF"
 ---------------------------------------------------------------------------
 -- CONSTANTS
 ---------------------------------------------------------------------------
@@ -184,6 +185,33 @@ local function SnapshotFishingTime()
     session.fishStart = nil
 end
 
+local LSM = LibStub("LibSharedMedia-3.0")
+
+LSM:Register("font", "Friz Quadrata", "Fonts\\FRIZQT__.TTF")
+
+local locale = GetLocale()
+-- WoW built-in CJK/Cyrillic fonts (only present on localized clients)
+if locale == "zhCN" then
+    LSM:Register("font", "AR CrystalzcuheiGBK",  "Fonts\\ARHei.ttf")
+    LSM:Register("font", "AR ZhongkaiGBK",        "Fonts\\ARKai_T.ttf")
+elseif locale == "zhTW" then
+    LSM:Register("font", "AR Heiti2 Medium",       "Fonts\\bHEI00M.ttf")
+    LSM:Register("font", "AR Leisu Demi",          "Fonts\\blei00d.TTF")
+    LSM:Register("font", "AR Kaiti Medium",        "Fonts\\bKAI00M.ttf")
+elseif locale == "koKR" then
+    LSM:Register("font", "2002",                   "Fonts\\2002.TTF")
+    LSM:Register("font", "K_Pagetext",             "Fonts\\K_Pagetext.TTF")
+elseif locale == "ruRU" then
+    LSM:Register("font", "Friz Quadrata CYR",      "Fonts\\FRIZQT___CYR.TTF")
+end
+
+local function GetFont()
+    if not settings then return NEMO_FONT end
+    return LSM:Fetch("font", settings.fontKey) or NEMO_FONT
+end
+
+local ApplyFont
+
 ---------------------------------------------------------------------------
 -- MAIN FRAME
 ---------------------------------------------------------------------------
@@ -206,18 +234,16 @@ local function ApplyFrameStyle()
 
     frame:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-        insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 16,
+        insets   = { left = 4, right = 4, top = 4, bottom = 4 },
     })
 
-    frame:SetBackdropColor(0, 0, 0, quietMode and 0 or settings.opacity)
-    frame:SetBackdropBorderColor(0, 0, 0, quietMode and 0 or settings.opacity)
+    frame:SetBackdropColor(0.03, 0.06, 0.14, quietMode and 0 or settings.opacity)
+    frame:SetBackdropBorderColor(0.2, 0.25, 0.35, quietMode and 0 or 0.8)
     frame:SetScale(settings.scale)
     frame:SetWidth(settings.frameWidth)
-    frame:SetHeight(quietMode and 28 or settings.frameHeight)
-
-    footerBg:SetAlpha(settings.opacity)
+    frame:SetHeight(quietMode and 32 or settings.frameHeight)
 
     topStripe:SetColorTexture(r, g, b)
 end
@@ -229,9 +255,9 @@ end
 ---------------------------------------------------------------------------
 
 local titleBar = CreateFrame("Frame", nil, frame)
-titleBar:SetHeight(28)
-titleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-titleBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+titleBar:SetHeight(32)
+titleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -4)
+titleBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
 titleBar:EnableMouse(true)
 titleBar:RegisterForDrag("LeftButton")
 titleBar:SetScript("OnDragStart", function()
@@ -248,7 +274,7 @@ end)
 
 local titleBg = titleBar:CreateTexture(nil, "BACKGROUND")
 titleBg:SetAllPoints()
-titleBg:SetColorTexture(0.008, 0.098, 0.27, 1)
+titleBg:SetColorTexture(0, 0, 0, 0)
 
 local fishIcon = titleBar:CreateTexture(nil, "ARTWORK")
 fishIcon:SetSize(16, 16)
@@ -257,17 +283,16 @@ fishIcon:SetTexture("Interface\\AddOns\\Nemo\\Textures\\hook")
 
 local titleText = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 titleText:SetPoint("LEFT", fishIcon, "RIGHT", 6, 0)
-titleText:SetFont(NEMO_FONT, 16, "")
+titleText:SetFont(NEMO_FONT, 17, "")
 titleText:SetText("Nemo")
 
 local zoneText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-zoneText:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 10, -2)
-zoneText:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT", -10, -2)
-zoneText:SetFont(NEMO_FONT, 14, "")
+zoneText:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 10, -4)
+zoneText:SetFont(NEMO_FONT, 13, "")
 
 local zoneTotalCount = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-zoneTotalCount:SetPoint("TOPLEFT", zoneText, "BOTTOMLEFT", 0, -2)
-zoneTotalCount:SetPoint("TOPRIGHT", zoneText, "BOTTOMRIGHT", 0, -2)
+zoneTotalCount:SetPoint("RIGHT", frame, "RIGHT", -10, 0)
+zoneTotalCount:SetPoint("TOP", titleBar, "BOTTOM", 0, -4)
 zoneTotalCount:SetFont(NEMO_FONT, 12, "")
 
 
@@ -329,17 +354,17 @@ restoreBtn:Hide()
 
 local sep = frame:CreateTexture(nil, "ARTWORK")
 sep:SetHeight(1)
-sep:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -62)
-sep:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -62)
-sep:SetColorTexture(1, 1, 1, 0.08)
+sep:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -54)
+sep:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -54)
+sep:SetColorTexture(0.15, 0.25, 0.45, 0.4)
 
 ---------------------------------------------------------------------------
 -- SCROLL FRAME
 ---------------------------------------------------------------------------
 
 local scrollFrame = CreateFrame("ScrollFrame", "NemoScrollFrame", frame, "UIPanelScrollFrameTemplate")
-scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -66)
-scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 44)
+scrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -56)
+scrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -10, 40)
 
 -- Style the scrollbar to be less obtrusive
 local scrollBar = NemoScrollFrameScrollBar
@@ -362,7 +387,7 @@ end)
 
 local resizer = CreateFrame("Button", nil, frame)
 resizer:SetSize(16, 16)
-resizer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
+resizer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -6, 6)
 
 local resizeIcon = resizer:CreateTexture(nil, "ARTWORK")
 resizeIcon:SetAllPoints()
@@ -384,25 +409,31 @@ end)
 -- FOOTER STATS
 ---------------------------------------------------------------------------
 local footerFrame = CreateFrame("Frame", nil, frame)
-footerFrame:SetHeight(38)
-footerFrame:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-footerFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+footerFrame:SetHeight(34)
+footerFrame:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 4, 4)
+footerFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
 
 footerBg = footerFrame:CreateTexture(nil, "BACKGROUND")
 footerBg:SetAllPoints()
-footerBg:SetColorTexture(0.008, 0.098, 0.27, 0.9)
+footerBg:SetColorTexture(0, 0, 0, 0)
+
+local footerSep = footerFrame:CreateTexture(nil, "ARTWORK")
+footerSep:SetHeight(1)
+footerSep:SetPoint("TOPLEFT", footerFrame, "TOPLEFT", 6, 0)
+footerSep:SetPoint("TOPRIGHT", footerFrame, "TOPRIGHT", -6, 0)
+footerSep:SetColorTexture(0.15, 0.25, 0.45, 0.4)
 
 -- Session stats
 sessionText = footerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-sessionText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 20)
-sessionText:SetTextColor(0.56, 0.56, 0.56)
-sessionText:SetFont(NEMO_FONT, 13, "")
+sessionText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 14, 22)
+sessionText:SetTextColor(0.45, 0.45, 0.45)
+sessionText:SetFont(NEMO_FONT, 12, "")
 
 -- Total Fishing Time
 totalFishingTimeText = footerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-totalFishingTimeText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 10, 5)
-totalFishingTimeText:SetTextColor(0.56, 0.56, 0.56)
-totalFishingTimeText:SetFont(NEMO_FONT, 13, "")
+totalFishingTimeText:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 14, 8)
+totalFishingTimeText:SetTextColor(0.45, 0.45, 0.45)
+totalFishingTimeText:SetFont(NEMO_FONT, 12, "")
 
 ---------------------------------------------------------------------------
 -- ROW RENDERING
@@ -417,14 +448,14 @@ local function GetRow(index)
     end
 
     local row = CreateFrame("Frame", nil, content)
-    row:SetHeight(22)
-    row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -((index - 1) * 23))
+    row:SetHeight(26)
+    row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -((index - 1) * 28))
     row:SetPoint("RIGHT", content, "RIGHT", 0, 0)
 
     if index % 2 == 0 then
         local bg = row:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints()
-        bg:SetColorTexture(1, 1, 1, 0.02)
+        bg:SetColorTexture(1, 1, 1, 0.03)
     end
 
     row.highlight = row:CreateTexture(nil, "BACKGROUND", nil, 1)
@@ -458,21 +489,21 @@ local function GetRow(index)
     end)
 
     row.icon = row:CreateTexture(nil, "ARTWORK")
-    row.icon:SetSize(18, 18)
-    row.icon:SetPoint("LEFT", row, "LEFT", 4, 0)
+    row.icon:SetSize(22, 22)
+    row.icon:SetPoint("LEFT", row, "LEFT", 6, 0)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
     row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+    row.name:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
     row.name:SetPoint("RIGHT", row, "RIGHT", -50, 0)
     row.name:SetJustifyH("LEFT")
     row.name:SetWordWrap(false)
-    row.name:SetFont(NEMO_FONT, 14, "")
+    row.name:SetFont(GetFont(), 14, "")
 
     row.count = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    row.count:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    row.count:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     row.count:SetJustifyH("RIGHT")
-    row.count:SetFont(NEMO_FONT, 13, "")
+    row.count:SetFont(GetFont(), 13, "")
 
     rowPool[index] = row
     return row
@@ -480,6 +511,21 @@ end
 
 local function HideAllRows()
     for _, row in ipairs(rowPool) do row:Hide() end
+end
+
+ApplyFont = function()
+    local font = GetFont()
+    titleText:SetFont(font, 17, "")
+    zoneText:SetFont(font, 13, "")
+    zoneTotalCount:SetFont(font, 12, "")
+    minimizeText:SetFont(font, 13, "OUTLINE")
+    restoreText:SetFont(font, 13, "OUTLINE")
+    sessionText:SetFont(font, 12, "")
+    totalFishingTimeText:SetFont(font, 12, "")
+    for _, row in ipairs(rowPool) do
+        row.name:SetFont(font, 14, "")
+        row.count:SetFont(font, 13, "")
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -517,11 +563,9 @@ local function RefreshDisplay()
     local zoneName = GetCurrentZoneName()
     local r, g, b = GetAccent()
 
-    topStripe:SetColorTexture(r, g, b, 0.8)
-    -- Hiding for now
     topStripe:Hide()
 
-    titleText:SetTextColor(1, 1, 1)
+    titleText:SetTextColor(r, g, b)
     fishIcon:SetVertexColor(r, g, b)
     zoneText:SetText(zoneName)
     zoneText:SetTextColor(r, g, b)
@@ -546,7 +590,7 @@ local function RefreshDisplay()
         minimizeBtn:Hide()
 
         -- Restyle title bar for compact mode
-        titleBg:SetColorTexture(0.008, 0.098, 0.27, 1)
+        titleBg:SetColorTexture(0.08, 0.08, 0.12, 0.92)
         fishIcon:SetVertexColor(r, g, b)
         fishIcon:SetAlpha(1.0)
 
@@ -573,31 +617,28 @@ local function RefreshDisplay()
     else
         -- Restore normal layout
         frame:SetHeight(settings.frameHeight)
-        frame:SetBackdropColor(0, 0, 0, settings.opacity)
-        frame:SetBackdropBorderColor(0, 0, 0, settings.opacity)
+        frame:SetBackdropColor(0.03, 0.06, 0.14, settings.opacity)
+        frame:SetBackdropBorderColor(0.2, 0.25, 0.35, 0.8)
         scrollFrame:Show()
         sep:Show()
         footerFrame:Show()
-        footerBg:SetAlpha(settings.opacity)
         titleText:Show()
         gearBtn:Show()
         closeBtn:Show()
         minimizeBtn:Show()
         restoreBtn:Hide()
-        titleBg:SetColorTexture(0.008, 0.098, 0.27, 1)
+        titleBg:SetColorTexture(0, 0, 0, 0)
         fishIcon:SetAlpha(1.0)
 
         -- Restore text back to main frame
         zoneText:SetParent(frame)
         zoneText:ClearAllPoints()
-        zoneText:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 10, -2)
-        zoneText:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT", -10, -2)
+        zoneText:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 10, -4)
 
         zoneTotalCount:SetParent(frame)
-        -- Restore zoneTotalCount anchoring
         zoneTotalCount:ClearAllPoints()
-        zoneTotalCount:SetPoint("TOPLEFT", zoneText, "BOTTOMLEFT", 0, -2)
-        zoneTotalCount:SetPoint("TOPRIGHT", zoneText, "BOTTOMRIGHT", 0, -2)
+        zoneTotalCount:SetPoint("RIGHT", frame, "RIGHT", -10, 0)
+        zoneTotalCount:SetPoint("TOP", titleBar, "BOTTOM", 0, -4)
 
         if #catches == 0 then
             local row = GetRow(1)
@@ -606,7 +647,7 @@ local function RefreshDisplay()
             row.name:SetTextColor(0.4, 0.4, 0.4)
             row.count:SetText("")
             row.itemName = nil
-            content:SetHeight(23)
+            content:SetHeight(28)
         else
             for i, catch in ipairs(catches) do
                 local row = GetRow(i)
@@ -620,16 +661,16 @@ local function RefreshDisplay()
                 row.name:SetTextColor(color[1], color[2], color[3])
 
                 row.count:SetText(FormatNumber(catch.count))
-                row.count:SetTextColor(r, g, b, 0.9)
+                row.count:SetTextColor(1, 1, 1, 0.9)
             end
-            content:SetHeight(#catches * 23)
+            content:SetHeight(#catches * 28)
         end
     end
 
     if not quietMode and settings.showTotal then
         local timeStr = FormatFishingTime(GetTotalFishingTime())
         zoneTotalCount:SetText(FormatNumber(total) .. " caught · " .. FormatNumber(unique) .. " unique")
-        zoneTotalCount:SetTextColor(1, 1, 1)
+        zoneTotalCount:SetTextColor(0.5, 0.5, 0.5)
 
         if session.catches > 0 then
             sessionText:SetText("Session: " .. FormatNumber(session.catches) .. " caught  ·  " .. timeStr)
@@ -658,7 +699,7 @@ local function ToggleQuietMode()
         if not quietModeSavedHeight then
             quietModeSavedHeight = settings.frameHeight
         end
-        frame:SetHeight(28)
+        frame:SetHeight(32)
         RefreshDisplay()
         if not frame:IsShown() then frame:Show() end
         DEFAULT_CHAT_FRAME:AddMessage(
@@ -685,12 +726,12 @@ settingsFrame:SetSize(300, 340)
 settingsFrame:SetPoint("CENTER")
 settingsFrame:SetBackdrop({
     bgFile   = "Interface\\Buttons\\WHITE8x8",
-    edgeFile = "Interface\\Buttons\\WHITE8x8",
-    edgeSize = 1,
-    insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    edgeSize = 16,
+    insets   = { left = 4, right = 4, top = 4, bottom = 4 },
 })
-settingsFrame:SetBackdropColor(0.08, 0.08, 0.12, 0.96)
-settingsFrame:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.6)
+settingsFrame:SetBackdropColor(0.03, 0.06, 0.14, 0.96)
+settingsFrame:SetBackdropBorderColor(0.2, 0.25, 0.35, 0.8)
 settingsFrame:SetMovable(true)
 settingsFrame:EnableMouse(true)
 settingsFrame:RegisterForDrag("LeftButton")
@@ -760,7 +801,7 @@ local scaleSlider = CreateSlider(settingsFrame, "Frame Scale",
 )
 
 local colorLabel = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-colorLabel:SetPoint("TOPLEFT", 16, -140)
+colorLabel:SetPoint("TOPLEFT", 16, -190)
 colorLabel:SetText("Accent Color")
 colorLabel:SetTextColor(0.8, 0.8, 0.8)
 
@@ -770,7 +811,7 @@ for i, preset in ipairs(COLOR_PRESETS) do
     local row = math.floor((i - 1) / 4)
     btn:SetSize(52, 24)
     btn:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT",
-        16 + (col * 62), -156 - (row * 30))
+        16 + (col * 62), -206 - (row * 30))
 
     local bg = btn:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
@@ -801,7 +842,7 @@ end
 
 local lockCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
 lockCheck:SetSize(24, 24)
-lockCheck:SetPoint("TOPLEFT", 12, -224)
+lockCheck:SetPoint("TOPLEFT", 12, -274)
 lockCheck.text:SetText(" Lock frame position")
 lockCheck.text:SetFontObject("GameFontNormalSmall")
 lockCheck.text:SetTextColor(0.8, 0.8, 0.8)
@@ -812,7 +853,7 @@ end)
 
 local totalCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
 totalCheck:SetSize(24, 24)
-totalCheck:SetPoint("TOPLEFT", 12, -250)
+totalCheck:SetPoint("TOPLEFT", 12, -300)
 totalCheck.text:SetText(" Show catch totals")
 totalCheck.text:SetFontObject("GameFontNormalSmall")
 totalCheck.text:SetTextColor(0.8, 0.8, 0.8)
@@ -823,7 +864,7 @@ end)
 
 local autoShowCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
 autoShowCheck:SetSize(24, 24)
-autoShowCheck:SetPoint("TOPLEFT", 12, -276)
+autoShowCheck:SetPoint("TOPLEFT", 12, -326)
 autoShowCheck.text:SetText(" Auto-show when fishing")
 autoShowCheck.text:SetFontObject("GameFontNormalSmall")
 autoShowCheck.text:SetTextColor(0.8, 0.8, 0.8)
@@ -833,7 +874,7 @@ end)
 
 local autoHideCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
 autoHideCheck:SetSize(24, 24)
-autoHideCheck:SetPoint("TOPLEFT", 12, -302)
+autoHideCheck:SetPoint("TOPLEFT", 12, -352)
 autoHideCheck.text:SetText(" Auto-hide after idle / on combat")
 autoHideCheck.text:SetFontObject("GameFontNormalSmall")
 autoHideCheck.text:SetTextColor(0.8, 0.8, 0.8)
@@ -841,7 +882,7 @@ autoHideCheck.text:SetTextColor(0.8, 0.8, 0.8)
 -- Hide delay slider (nested under auto-hide)
 local hideDelayContainer = CreateFrame("Frame", nil, settingsFrame)
 hideDelayContainer:SetSize(240, 40)
-hideDelayContainer:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 36, -326)
+hideDelayContainer:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 36, -376)
 
 local hideDelayLabel = hideDelayContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 hideDelayLabel:SetPoint("TOPLEFT", 0, 0)
@@ -865,13 +906,184 @@ hideDelaySlider:SetScript("OnValueChanged", function(self, value)
     UpdateHideDelayLabel()
 end)
 
+-- Font selector
+local fontLabel = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+fontLabel:SetPoint("TOPLEFT", 16, -136)
+fontLabel:SetText("Font")
+fontLabel:SetTextColor(0.8, 0.8, 0.8)
+
+local fontButton = CreateFrame("Button", nil, settingsFrame, "BackdropTemplate")
+fontButton:SetSize(260, 22)
+fontButton:SetPoint("TOPLEFT", 16, -152)
+fontButton:SetBackdrop({
+    bgFile   = "Interface\\Buttons\\WHITE8x8",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
+    edgeSize = 1,
+    insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+})
+fontButton:SetBackdropColor(0.1, 0.1, 0.15, 1)
+fontButton:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.6)
+
+local fontButtonText = fontButton:CreateFontString(nil, "OVERLAY")
+fontButtonText:SetPoint("LEFT", 8, 0)
+fontButtonText:SetFont(NEMO_FONT, 12, "")
+fontButtonText:SetTextColor(0.9, 0.9, 0.9)
+fontButtonText:SetText("Friz Quadrata")
+
+local fontButtonArrow = fontButton:CreateFontString(nil, "OVERLAY")
+fontButtonArrow:SetPoint("RIGHT", -8, 0)
+fontButtonArrow:SetFont(NEMO_FONT, 11, "")
+fontButtonArrow:SetText("v")
+fontButtonArrow:SetTextColor(0.5, 0.5, 0.5)
+
+fontButton:SetScript("OnEnter", function()
+    fontButton:SetBackdropBorderColor(0.5, 0.5, 0.5, 0.8)
+end)
+fontButton:SetScript("OnLeave", function()
+    fontButton:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.6)
+end)
+
+-- Font dropdown catcher (click-outside-to-close)
+local fontDropdownCatcher = CreateFrame("Button", nil, UIParent)
+fontDropdownCatcher:SetAllPoints(UIParent)
+fontDropdownCatcher:SetFrameStrata("DIALOG")
+fontDropdownCatcher:Hide()
+fontDropdownCatcher:SetScript("OnClick", function()
+    fontDropdownCatcher:Hide()
+end)
+
+-- Font dropdown list
+local fontDropdown = CreateFrame("Frame", nil, settingsFrame, "BackdropTemplate")
+fontDropdown:SetSize(260, 200)
+fontDropdown:SetPoint("TOPLEFT", fontButton, "BOTTOMLEFT", 0, -2)
+fontDropdown:SetBackdrop({
+    bgFile   = "Interface\\Buttons\\WHITE8x8",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
+    edgeSize = 1,
+    insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+})
+fontDropdown:SetBackdropColor(0.06, 0.06, 0.10, 0.98)
+fontDropdown:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.6)
+fontDropdown:SetClipsChildren(true)
+fontDropdown:Hide()
+
+-- Ensure dropdown draws above settingsFrame
+fontDropdown:SetScript("OnShow", function(self)
+    self:SetFrameLevel(settingsFrame:GetFrameLevel() + 10)
+end)
+
+local fontScrollOffset = 0
+local fontRowPool = {}
+local FONT_ROW_HEIGHT = 22
+local FONT_VISIBLE_ROWS = 9
+
+local function RenderFontDropdown()
+    local fonts = LSM:List("font")
+    local maxOffset = math.max(0, #fonts - FONT_VISIBLE_ROWS)
+    if fontScrollOffset > maxOffset then fontScrollOffset = maxOffset end
+    if fontScrollOffset < 0 then fontScrollOffset = 0 end
+
+    for i = 1, FONT_VISIBLE_ROWS do
+        local fontIndex = i + fontScrollOffset
+        local fontName = fonts[fontIndex]
+
+        if not fontRowPool[i] then
+            local row = CreateFrame("Button", nil, fontDropdown)
+            row:SetHeight(FONT_ROW_HEIGHT)
+            row:SetPoint("TOPLEFT", fontDropdown, "TOPLEFT", 2, -((i - 1) * FONT_ROW_HEIGHT) - 2)
+            row:SetPoint("RIGHT", fontDropdown, "RIGHT", -2, 0)
+
+            row.highlight = row:CreateTexture(nil, "BACKGROUND")
+            row.highlight:SetAllPoints()
+            row.highlight:SetColorTexture(1, 1, 1, 0.06)
+            row.highlight:Hide()
+
+            row.label = row:CreateFontString(nil, "OVERLAY")
+            row.label:SetPoint("LEFT", 8, 0)
+            row.label:SetPoint("RIGHT", -8, 0)
+            row.label:SetJustifyH("LEFT")
+
+            row:SetScript("OnEnter", function(self) self.highlight:Show() end)
+            row:SetScript("OnLeave", function(self) self.highlight:Hide() end)
+
+            fontRowPool[i] = row
+        end
+
+        local row = fontRowPool[i]
+        if fontName then
+            local fontPath = LSM:Fetch("font", fontName)
+            if not pcall(row.label.SetFont, row.label, fontPath, 13, "") then
+                row.label:SetFont(NEMO_FONT, 13, "")
+            end
+            row.label:SetText(fontName)
+
+            if fontName == settings.fontKey then
+                local r, g, b = GetAccent()
+                row.label:SetTextColor(r, g, b)
+            else
+                row.label:SetTextColor(0.85, 0.85, 0.85)
+            end
+
+            row:SetScript("OnClick", function()
+                settings.fontKey = fontName
+                ApplyFont()
+                fontButtonText:SetText(fontName)
+                fontButtonText:SetFont(GetFont(), 12, "")
+                fontDropdown:Hide()
+                fontDropdownCatcher:Hide()
+                RenderFontDropdown()
+            end)
+            row:Show()
+        else
+            row:Hide()
+        end
+    end
+end
+
+fontDropdown:SetScript("OnMouseWheel", function(self, delta)
+    fontScrollOffset = fontScrollOffset - (delta * 3)
+    RenderFontDropdown()
+end)
+
+fontButton:SetScript("OnClick", function()
+    if fontDropdown:IsShown() then
+        fontDropdown:Hide()
+        fontDropdownCatcher:Hide()
+    else
+        fontScrollOffset = 0
+        -- Scroll to current font so it's visible
+        local fonts = LSM:List("font")
+        for i, name in ipairs(fonts) do
+            if name == settings.fontKey then
+                fontScrollOffset = math.max(0, i - math.floor(FONT_VISIBLE_ROWS / 2))
+                break
+            end
+        end
+        fontDropdownCatcher:Show()
+        fontDropdownCatcher:SetFrameLevel(settingsFrame:GetFrameLevel() + 5)
+        fontDropdown:Show()
+        RenderFontDropdown()
+    end
+end)
+
+-- Close dropdown when catcher is clicked
+fontDropdownCatcher:SetScript("OnClick", function()
+    fontDropdown:Hide()
+    fontDropdownCatcher:Hide()
+end)
+
+settingsFrame:SetScript("OnHide", function()
+    fontDropdown:Hide()
+    fontDropdownCatcher:Hide()
+end)
+
 local function SetHideDelayVisible(show)
     if show then
         hideDelayContainer:Show()
-        settingsFrame:SetHeight(380)
+        settingsFrame:SetHeight(430)
     else
         hideDelayContainer:Hide()
-        settingsFrame:SetHeight(340)
+        settingsFrame:SetHeight(390)
     end
 end
 
@@ -894,6 +1106,10 @@ local function OpenSettings()
     hideDelaySlider:SetValue(settings.hideDelay)
     UpdateHideDelayLabel()
     SetHideDelayVisible(settings.autoHide)
+    fontButtonText:SetText(settings.fontKey)
+    fontButtonText:SetFont(GetFont(), 12, "")
+    fontDropdown:Hide()
+    fontDropdownCatcher:Hide()
     local r,g,b = GetAccent()
     sTitle:SetTextColor(r,g,b)
     settingsFrame:Show()
@@ -1405,6 +1621,7 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             settings = NemoDB.settings
 
             ApplyFrameStyle()
+            ApplyFont()
             resizer:SetShown(not settings.locked)
 
             if settings.anchorPoint then

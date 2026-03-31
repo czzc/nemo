@@ -13,10 +13,11 @@ I wanted a simple way to see what I've been catching in each zone without diggin
 - Hover over items in your bags and Nemo will show you where and how many times you've caught that item
 - Session stats (catches this session, time spent fishing)
 - Total time fishing
-- **Quiet mode** - Shrinks the window down to a single frame with only Zone name and total catches, keeping it out of the way and small. Re-enabling 'normal' mode, will still show all the catches in the list that you had during quiet mode.
-- **Silent mode** - Hides the window and tracks catches in the background. The minimap icon pulses when you catch something, and clicking it prints a summary of what you've caught to chat for the session.
-- **Minimap button** - Left-click to toggle the window. Tooltip shows your last 3 catches.
-- **Voidstorm support** - detects catches from `Oceanic Vortex` which, sadly, doesn't work like regular fishing. There is no good way to auto-detect when a Vortex is near, but we will log it if you catch something from one.
+- Quiet mode - Shrinks the window down to a single frame with only Zone name and total catches, keeping it out of the way and small. Re-enabling 'normal' mode, will still show all the catches in the list that you had during quiet mode.
+- Silent mode - Hides the window and tracks catches in the background. The minimap icon pulses when you catch something, and clicking it prints a summary of what you've caught to chat for the session.
+- Minimap button - Left-click to toggle the window. Tooltip shows your last 3 catches.
+- Voidstorm support - detects catches from `Oceanic Vortex` which, sadly, doesn't work like regular fishing. There is no good way to auto-detect when a Vortex is near, but we will log it if you catch something from one.
+- Sort By options - "Most Recent" and "Most Caught"
 
 ### The UI
 

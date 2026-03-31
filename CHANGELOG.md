@@ -1,3 +1,9 @@
+### v1.2.1
+
+- feat: add "Sort by" option with Most Caught and Most Recent modes
+  - New "Sort by" dropdown in settings panel with two modes: - Most Caught (default) - Most Recent: last caught item floats to the top of the list
+  - Items caught before this update sort to the bottom in Most Recent mode until caught again.
+
 ### v1.2.0
 
 - slight re-design of the main window

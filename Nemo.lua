@@ -23,7 +23,8 @@ local DEFAULT_SETTINGS = {
     anchorY        = nil,
     totalFishingTime = 0,
     showMinimap    = true,
-    fontKey        = "Friz Quadrata"
+    fontKey        = "Friz Quadrata",
+    sortMode       = "count",  -- "count" or "recent"
 }
 
 -- Accent color presets for the picker
@@ -546,13 +547,21 @@ local function GetCurrentZoneCatches()
             quality = data.quality or 1,
             itemId = data.itemId,
             currencyId = data.currencyId,
+            lastCaught = data.lastCaught or 0,
         })
     end
 
-    table.sort(sorted, function(a, b)
-        if a.count ~= b.count then return a.count > b.count end
-        return a.name < b.name
-    end)
+    if settings.sortMode == "recent" then
+        table.sort(sorted, function(a, b)
+            if a.lastCaught ~= b.lastCaught then return a.lastCaught > b.lastCaught end
+            return a.name < b.name
+        end)
+    else
+        table.sort(sorted, function(a, b)
+            if a.count ~= b.count then return a.count > b.count end
+            return a.name < b.name
+        end)
+    end
 
     return sorted
 end
@@ -801,7 +810,7 @@ local scaleSlider = CreateSlider(settingsFrame, "Frame Scale",
 )
 
 local colorLabel = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-colorLabel:SetPoint("TOPLEFT", 16, -190)
+colorLabel:SetPoint("TOPLEFT", 16, -226)
 colorLabel:SetText("Accent Color")
 colorLabel:SetTextColor(0.8, 0.8, 0.8)
 
@@ -811,7 +820,7 @@ for i, preset in ipairs(COLOR_PRESETS) do
     local row = math.floor((i - 1) / 4)
     btn:SetSize(52, 24)
     btn:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT",
-        16 + (col * 62), -206 - (row * 30))
+        16 + (col * 62), -242 - (row * 30))
 
     local bg = btn:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
@@ -842,7 +851,7 @@ end
 
 local lockCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
 lockCheck:SetSize(24, 24)
-lockCheck:SetPoint("TOPLEFT", 12, -274)
+lockCheck:SetPoint("TOPLEFT", 12, -310)
 lockCheck.text:SetText(" Lock frame position")
 lockCheck.text:SetFontObject("GameFontNormalSmall")
 lockCheck.text:SetTextColor(0.8, 0.8, 0.8)
@@ -853,7 +862,7 @@ end)
 
 local totalCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
 totalCheck:SetSize(24, 24)
-totalCheck:SetPoint("TOPLEFT", 12, -300)
+totalCheck:SetPoint("TOPLEFT", 12, -336)
 totalCheck.text:SetText(" Show catch totals")
 totalCheck.text:SetFontObject("GameFontNormalSmall")
 totalCheck.text:SetTextColor(0.8, 0.8, 0.8)
@@ -864,7 +873,7 @@ end)
 
 local autoShowCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
 autoShowCheck:SetSize(24, 24)
-autoShowCheck:SetPoint("TOPLEFT", 12, -326)
+autoShowCheck:SetPoint("TOPLEFT", 12, -362)
 autoShowCheck.text:SetText(" Auto-show when fishing")
 autoShowCheck.text:SetFontObject("GameFontNormalSmall")
 autoShowCheck.text:SetTextColor(0.8, 0.8, 0.8)
@@ -874,7 +883,7 @@ end)
 
 local autoHideCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
 autoHideCheck:SetSize(24, 24)
-autoHideCheck:SetPoint("TOPLEFT", 12, -352)
+autoHideCheck:SetPoint("TOPLEFT", 12, -388)
 autoHideCheck.text:SetText(" Auto-hide after idle / on combat")
 autoHideCheck.text:SetFontObject("GameFontNormalSmall")
 autoHideCheck.text:SetTextColor(0.8, 0.8, 0.8)
@@ -882,7 +891,7 @@ autoHideCheck.text:SetTextColor(0.8, 0.8, 0.8)
 -- Hide delay slider (nested under auto-hide)
 local hideDelayContainer = CreateFrame("Frame", nil, settingsFrame)
 hideDelayContainer:SetSize(240, 40)
-hideDelayContainer:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 36, -376)
+hideDelayContainer:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 36, -412)
 
 local hideDelayLabel = hideDelayContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 hideDelayLabel:SetPoint("TOPLEFT", 0, 0)
@@ -1072,18 +1081,140 @@ fontDropdownCatcher:SetScript("OnClick", function()
     fontDropdownCatcher:Hide()
 end)
 
+-- Sort by dropdown
+local SORT_OPTIONS = {
+    { key = "count",  label = "Most Caught" },
+    { key = "recent", label = "Most Recent" },
+}
+
+local SORT_LABELS = {}
+for _, opt in ipairs(SORT_OPTIONS) do SORT_LABELS[opt.key] = opt.label end
+
+local sortLabel = settingsFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+sortLabel:SetPoint("TOPLEFT", 16, -180)
+sortLabel:SetText("Sort by")
+sortLabel:SetTextColor(0.8, 0.8, 0.8)
+
+local sortButton = CreateFrame("Button", nil, settingsFrame, "BackdropTemplate")
+sortButton:SetSize(260, 22)
+sortButton:SetPoint("TOPLEFT", 16, -196)
+sortButton:SetBackdrop({
+    bgFile   = "Interface\\Buttons\\WHITE8x8",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
+    edgeSize = 1,
+    insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+})
+sortButton:SetBackdropColor(0.1, 0.1, 0.15, 1)
+sortButton:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.6)
+
+local sortButtonText = sortButton:CreateFontString(nil, "OVERLAY")
+sortButtonText:SetPoint("LEFT", 8, 0)
+sortButtonText:SetFont(NEMO_FONT, 12, "")
+sortButtonText:SetTextColor(0.9, 0.9, 0.9)
+sortButtonText:SetText("Most Caught")
+
+local sortButtonArrow = sortButton:CreateFontString(nil, "OVERLAY")
+sortButtonArrow:SetPoint("RIGHT", -8, 0)
+sortButtonArrow:SetFont(NEMO_FONT, 11, "")
+sortButtonArrow:SetText("v")
+sortButtonArrow:SetTextColor(0.5, 0.5, 0.5)
+
+sortButton:SetScript("OnEnter", function()
+    sortButton:SetBackdropBorderColor(0.5, 0.5, 0.5, 0.8)
+end)
+sortButton:SetScript("OnLeave", function()
+    sortButton:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.6)
+end)
+
+local sortDropdownCatcher = CreateFrame("Button", nil, UIParent)
+sortDropdownCatcher:SetAllPoints(UIParent)
+sortDropdownCatcher:SetFrameStrata("DIALOG")
+sortDropdownCatcher:Hide()
+
+local sortDropdown = CreateFrame("Frame", nil, settingsFrame, "BackdropTemplate")
+sortDropdown:SetSize(260, #SORT_OPTIONS * 22 + 4)
+sortDropdown:SetPoint("TOPLEFT", sortButton, "BOTTOMLEFT", 0, -2)
+sortDropdown:SetBackdrop({
+    bgFile   = "Interface\\Buttons\\WHITE8x8",
+    edgeFile = "Interface\\Buttons\\WHITE8x8",
+    edgeSize = 1,
+    insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+})
+sortDropdown:SetBackdropColor(0.06, 0.06, 0.10, 0.98)
+sortDropdown:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.6)
+sortDropdown:Hide()
+
+sortDropdown:SetScript("OnShow", function(self)
+    self:SetFrameLevel(settingsFrame:GetFrameLevel() + 10)
+end)
+
+for i, opt in ipairs(SORT_OPTIONS) do
+    local row = CreateFrame("Button", nil, sortDropdown)
+    row:SetHeight(22)
+    row:SetPoint("TOPLEFT", sortDropdown, "TOPLEFT", 2, -((i - 1) * 22) - 2)
+    row:SetPoint("RIGHT", sortDropdown, "RIGHT", -2, 0)
+
+    local hl = row:CreateTexture(nil, "BACKGROUND")
+    hl:SetAllPoints()
+    hl:SetColorTexture(1, 1, 1, 0.06)
+    hl:Hide()
+
+    local label = row:CreateFontString(nil, "OVERLAY")
+    label:SetPoint("LEFT", 8, 0)
+    label:SetFont(NEMO_FONT, 13, "")
+    label:SetText(opt.label)
+
+    row:SetScript("OnEnter", function() hl:Show() end)
+    row:SetScript("OnLeave", function() hl:Hide() end)
+
+    row:SetScript("OnShow", function()
+        local r, g, b = GetAccent()
+        if settings.sortMode == opt.key then
+            label:SetTextColor(r, g, b)
+        else
+            label:SetTextColor(0.85, 0.85, 0.85)
+        end
+    end)
+
+    row:SetScript("OnClick", function()
+        settings.sortMode = opt.key
+        sortButtonText:SetText(opt.label)
+        sortDropdown:Hide()
+        sortDropdownCatcher:Hide()
+        if frame:IsShown() then RefreshDisplay() end
+    end)
+end
+
+sortButton:SetScript("OnClick", function()
+    if sortDropdown:IsShown() then
+        sortDropdown:Hide()
+        sortDropdownCatcher:Hide()
+    else
+        sortDropdownCatcher:Show()
+        sortDropdownCatcher:SetFrameLevel(settingsFrame:GetFrameLevel() + 5)
+        sortDropdown:Show()
+    end
+end)
+
+sortDropdownCatcher:SetScript("OnClick", function()
+    sortDropdown:Hide()
+    sortDropdownCatcher:Hide()
+end)
+
 settingsFrame:SetScript("OnHide", function()
     fontDropdown:Hide()
     fontDropdownCatcher:Hide()
+    sortDropdown:Hide()
+    sortDropdownCatcher:Hide()
 end)
 
 local function SetHideDelayVisible(show)
     if show then
         hideDelayContainer:Show()
-        settingsFrame:SetHeight(430)
+        settingsFrame:SetHeight(466)
     else
         hideDelayContainer:Hide()
-        settingsFrame:SetHeight(390)
+        settingsFrame:SetHeight(426)
     end
 end
 
@@ -1110,6 +1241,9 @@ local function OpenSettings()
     fontButtonText:SetFont(GetFont(), 12, "")
     fontDropdown:Hide()
     fontDropdownCatcher:Hide()
+    sortButtonText:SetText(SORT_LABELS[settings.sortMode] or "Most Caught")
+    sortDropdown:Hide()
+    sortDropdownCatcher:Hide()
     local r,g,b = GetAccent()
     sTitle:SetTextColor(r,g,b)
     settingsFrame:Show()
@@ -1173,6 +1307,7 @@ local function OnLootMessage(event, msg)
 
     local entry = NemoDB.catches[mapId][itemName]
     entry.count = entry.count + lootCount
+    entry.lastCaught = time()
     if icon then entry.icon = icon end
     if quality then entry.quality = quality end
     if itemId then entry.itemId = itemId end
@@ -1235,6 +1370,7 @@ local function OnCurrencyMessage(event, msg)
 
     local entry = NemoDB.catches[mapId][currencyName]
     entry.count = entry.count + lootCount
+    entry.lastCaught = time()
     if icon then entry.icon = icon end
     if quality then entry.quality = quality end
     if currencyIdStr then entry.currencyId = tonumber(currencyIdStr) end

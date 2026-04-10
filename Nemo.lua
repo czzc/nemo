@@ -43,6 +43,8 @@ local NEMO_FONT = "Fonts\\FRIZQT__.TTF"
 ---------------------------------------------------------------------------
 -- CONSTANTS
 ---------------------------------------------------------------------------
+local VOIDSTORM_MAP_ID = 2405
+
 ---------------------------------------------------------------------------
 -- STATE
 ---------------------------------------------------------------------------
@@ -55,6 +57,8 @@ local silentCatches = {}  -- { [itemName] = count } accumulated while silent mod
 local quietMode = false
 local quietModeSavedHeight = nil
 local fishingLootOpen = false
+local isCompressedOcean = false   -- true when fishing from a Hyper-Compressed Ocean toy
+local isAnglersAnomaly = false    -- true when fishing from Angler's Anomaly (void hole outside Voidstorm)
 
 -- Session tracking (resets each login)
 local session = {
@@ -167,14 +171,22 @@ local function GetTotalFishingTime()
 end
 
 local function UpdateTimerText()
-    if not settings.showTotal then return end
+    if not settings.showTotal then
+        sessionText:SetText("")
+        totalFishingTimeText:SetText("")
+        return
+    end
 
     if session.catches > 0 then
-        local timeStr = FormatFishingTime(GetTotalFishingTime())    
+        local timeStr = FormatFishingTime(GetTotalFishingTime())
         sessionText:SetText("Session: " .. FormatNumber(session.catches) .. " caught  ·  " .. timeStr)
     else
         sessionText:SetText("")
     end
+
+    local liveDelta = session.fishStart and (GetTime() - session.fishStart) or 0
+    local liveTotal = (settings.totalFishingTime or 0) + liveDelta
+    totalFishingTimeText:SetText("Total fishing time: " .. FormatFishingTime(liveTotal))
 end
 
 -- snapshot the current fishing sessions time into session and persistent totals
@@ -677,20 +689,12 @@ local function RefreshDisplay()
     end
 
     if not quietMode and settings.showTotal then
-        local timeStr = FormatFishingTime(GetTotalFishingTime())
         zoneTotalCount:SetText(FormatNumber(total) .. " caught · " .. FormatNumber(unique) .. " unique")
         zoneTotalCount:SetTextColor(0.5, 0.5, 0.5)
+    end
 
-        if session.catches > 0 then
-            sessionText:SetText("Session: " .. FormatNumber(session.catches) .. " caught  ·  " .. timeStr)
-        else
-            sessionText:SetText("")
-        end
-
-        totalFishingTimeText:SetText("Total fishing time: " .. FormatFishingTime(settings.totalFishingTime or 0))
-    elseif not quietMode then
-        sessionText:SetText("")
-        totalFishingTimeText:SetText("")
+    if not quietMode then
+        UpdateTimerText()
     end
 end
 
@@ -1308,6 +1312,12 @@ local function OnLootMessage(event, msg)
     local entry = NemoDB.catches[mapId][itemName]
     entry.count = entry.count + lootCount
     entry.lastCaught = time()
+    if isCompressedOcean then
+        entry.compressedOceanCount = (entry.compressedOceanCount or 0) + lootCount
+    end
+    if isAnglersAnomaly then
+        entry.anglersAnomalyCount = (entry.anglersAnomalyCount or 0) + lootCount
+    end
     if icon then entry.icon = icon end
     if quality then entry.quality = quality end
     if itemId then entry.itemId = itemId end
@@ -1371,6 +1381,12 @@ local function OnCurrencyMessage(event, msg)
     local entry = NemoDB.catches[mapId][currencyName]
     entry.count = entry.count + lootCount
     entry.lastCaught = time()
+    if isCompressedOcean then
+        entry.compressedOceanCount = (entry.compressedOceanCount or 0) + lootCount
+    end
+    if isAnglersAnomaly then
+        entry.anglersAnomalyCount = (entry.anglersAnomalyCount or 0) + lootCount
+    end
     if icon then entry.icon = icon end
     if quality then entry.quality = quality end
     if currencyIdStr then entry.currencyId = tonumber(currencyIdStr) end
@@ -1443,6 +1459,9 @@ local function OnLootReady()
         isFishing = true
         fishingLootOpen = true
         wasVortexChannel = false
+        if not session.fishStart then
+            session.fishStart = GetTime()
+        end
         if not silentMode and settings.autoShow and not frame:IsShown() then
             RefreshDisplay()
             frame:Show()
@@ -1485,10 +1504,30 @@ local function BuildItemZoneLookup(itemName)
             local info = C_Map.GetMapInfo(mapId)
             if info then zoneName = info.name end
 
-            table.insert(zones, {
-                name  = zoneName,
-                count = zoneData[itemName].count or 0,
-            })
+            local entry = zoneData[itemName]
+            local totalCount = entry.count or 0
+            local oceanCount = entry.compressedOceanCount or 0
+            local anomalyCount = entry.anglersAnomalyCount or 0
+            local normalCount = totalCount - oceanCount - anomalyCount
+
+            if oceanCount > 0 then
+                table.insert(zones, {
+                    name  = zoneName .. " |cFF4CBFF0(Hyper-Compressed Ocean)|r",
+                    count = oceanCount,
+                })
+            end
+            if anomalyCount > 0 then
+                table.insert(zones, {
+                    name  = zoneName .. " |cFF4CBFF0(Angler's Anomaly)|r",
+                    count = anomalyCount,
+                })
+            end
+            if normalCount > 0 then
+                table.insert(zones, {
+                    name  = zoneName,
+                    count = normalCount,
+                })
+            end
         end
     end
 
@@ -1534,6 +1573,7 @@ local function OnTooltipSetItem(tooltip, data)
             0.5, 0.5, 0.5
         )
     end
+
 
     tooltip:Show()
 end
@@ -1798,6 +1838,8 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
             C_Timer.After(0.1, function()
                 isFishing = false
                 fishingLootOpen = false
+                isCompressedOcean = false
+                isAnglersAnomaly = false
             end)
         end
     elseif event == "PLAYER_LOGOUT" then
@@ -1806,8 +1848,13 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         local unit = ...
         if unit == "player" then
             local name = UnitChannelInfo("player")
-            if name == "Void Hole Fishing" then
+            if name == "Void Hole Fishing" or name == "Compressed Ocean Fishing" then
                 wasVortexChannel = true
+                isCompressedOcean = (name == "Compressed Ocean Fishing")
+                if name == "Void Hole Fishing" then
+                    local mapId = C_Map.GetBestMapForUnit("player")
+                    isAnglersAnomaly = (mapId ~= VOIDSTORM_MAP_ID)
+                end
             end
         end
     elseif event == "PLAYER_REGEN_DISABLED" then

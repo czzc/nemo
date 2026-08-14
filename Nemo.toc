@@ -1,4 +1,4 @@
-## Interface: 120005, 120001, 110207, 110200, 110105, 110100, 110002, 110000, 100207, 100200, 100002, 100000
+## Interface: 120100, 120005, 120001, 110207, 110200, 110105, 110100, 110002, 110000, 100207, 100200, 100002, 100000
 ## Title: Nemo
 ## Notes: Your fishing catch history for every zone, one cast at a time.
 ## Author: czzc

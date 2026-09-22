@@ -10,7 +10,7 @@ I wanted a simple way to see what I've been catching in each zone without diggin
 
 - Tracks every item you catch while fishing, per zone
 - Auto-shows when you start fishing, auto-hides when you stop (delay is configurable)
-- Hover over items in your bags and Nemo will show you where and how many times you've caught that item
+- Hover over items in your bags and Nemo will show you where and how many times you've caught that item, broken down by subzone (`Ironforge - The Forlorn Cavern`)
 - Session stats (catches this session, time spent fishing)
 - Total time fishing
 - Quiet mode - Shrinks the window down to a single frame with only Zone name and total catches, keeping it out of the way and small. Re-enabling 'normal' mode, will still show all the catches in the list that you had during quiet mode
@@ -19,6 +19,7 @@ I wanted a simple way to see what I've been catching in each zone without diggin
 - Voidstorm support - detects catches from `Oceanic Vortex` which, sadly, doesn't work like regular fishing. There is no good way to auto-detect when a Vortex is near, but we will log it if you catch something from one
 - Hyper-Compressed Ocean support - detects catches from `Hyper-Compressed Ocean` toy and logs the catch like normal
 - Sort By options - "Most Recent" and "Most Caught"
+- Works on Classic-based clients too - fishing is detected by the Classic per-rank spells as well as the retail one, and falls back to the loot window itself if the client uses a spell we don't know about
 
 ### The UI
 
@@ -35,6 +36,7 @@ Dark, minimal, stays out of your way. Draggable, resizable, and you can tweak th
 /nemo zone - Show your current zone/map ID
 /nemo remove <Item Name> - Remove a specific item from all zones (case-sensitive)
 /nemo reset - Wipe all catch data (asks for confirmation)
+/nemo debug - Print catch detection details to chat (for troubleshooting)
 ```
 
 ### Notes

@@ -1,3 +1,23 @@
+### v1.2.4
+
+- fix: catches were not tracked on Classic-based clients (including the WoW Forever beta). Fishing was only recognised by the retail spell IDs, and Classic clients cast a different spell for every Fishing rank. The Classic rank IDs are now included, and as a client-agnostic backup a catch is also recognised when the loot window itself reports fishing loot
+- feat: item tooltips now break a zone's catches down by subzone, so fishing in Ironforge shows **Ironforge - The Forlorn Cavern** rather than just Ironforge. The two busiest spots per zone are named and the rest roll into a single "elsewhere" line. Catches recorded before this update keep showing under the plain zone name
+- feat: `/nemo zone` now prints the subzone alongside the zone name and map ID
+- feat: added `/nemo debug`, which prints casts, loot events, and raw loot messages to chat for diagnosing catch detection on unfamiliar clients
+- Added interface support for the WoW Forever beta (`16001`)
+
+### v1.2.3
+
+- Added support for patch 12.1 (interface `120100`)
+- Updated README
+
+### v1.2.2
+
+- feat: catches from the **Hyper-Compressed Ocean** toy are now tracked separately and called out in the item tooltip, so toy catches are no longer lumped in with normal casts for that zone
+- feat: catches from **Angler's Anomaly** are tracked the same way. Since it shares the "Void Hole Fishing" channel with Voidstorm vortexes, it is identified by the player being outside Voidstorm, and those catches are noted separately in the tooltip
+- fix: vortex and Hyper-Compressed Ocean fishing were not starting the session timer
+- fix: total fishing time was not ticking live, and only updated after a fishing bout ended
+
 ### v1.2.1
 
 - feat: add "Sort by" option with Most Caught and Most Recent modes

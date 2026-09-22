@@ -45,6 +45,11 @@ local NEMO_FONT = "Fonts\\FRIZQT__.TTF"
 ---------------------------------------------------------------------------
 local VOIDSTORM_MAP_ID = 2405
 
+-- Maximum number of named subzones shown per zone in item tooltips. Anything
+-- past this rolls into a single "elsewhere" line, so a fish caught along a
+-- winding coastline doesn't flood the tooltip with near-empty entries.
+local MAX_SUBZONE_LINES = 2
+
 ---------------------------------------------------------------------------
 -- STATE
 ---------------------------------------------------------------------------
@@ -57,6 +62,7 @@ local silentCatches = {}  -- { [itemName] = count } accumulated while silent mod
 local quietMode = false
 local quietModeSavedHeight = nil
 local fishingLootOpen = false
+local debugMode = false  -- /nemo debug: print fishing-related events to chat (not saved)
 local isCompressedOcean = false   -- true when fishing from a Hyper-Compressed Ocean toy
 local isAnglersAnomaly = false    -- true when fishing from Angler's Anomaly (void hole outside Voidstorm)
 
@@ -69,9 +75,17 @@ local session = {
     recentCatches = {},      -- Last 3 catches (name, icon, count) for minimap tooltip
 }
 
--- Spell IDs for standard fishing casts
+-- Spell IDs for standard fishing casts.
+-- Retail uses a single unranked Fishing spell, but Classic-based clients
+-- (Classic Era, progression realms, WoW Forever) use a separate spell ID
+-- for every Fishing rank, so those are listed too.
 local FISHING_SPELLS = {
+    -- Retail
     [131474] = true, [131490] = true, [243756] = true,
+    -- Classic ranks: Apprentice, Journeyman, Expert, Artisan, Master,
+    -- Grand Master, Illustrious, Zen Master
+    [7620] = true, [7731] = true, [7732] = true, [18248] = true,
+    [33095] = true, [51294] = true, [88868] = true, [110410] = true,
 }
 
 -- Quality colors matching WoW's standard item quality tiers
@@ -111,6 +125,26 @@ end
 
 local function GetCurrentMapId()
     return C_Map.GetBestMapForUnit("player")
+end
+
+-- Returns the current subzone (e.g. "The Forlorn Cavern" inside Ironforge),
+-- or nil when there isn't one or it just repeats the zone name.
+local function GetCurrentSubZone()
+    local subZone = GetSubZoneText and GetSubZoneText()
+    if not subZone or subZone == "" then return nil end
+    if subZone == (GetZoneText and GetZoneText()) then return nil end
+    return subZone
+end
+
+-- Records which subzone a catch came from so item tooltips can break a zone's
+-- total down further. Toy catches are skipped: they can happen anywhere and
+-- already get their own tooltip lines.
+local function RecordSubZoneCatch(entry, lootCount)
+    if isCompressedOcean or isAnglersAnomaly then return end
+    local subZone = GetCurrentSubZone()
+    if not subZone then return end
+    entry.subZones = entry.subZones or {}
+    entry.subZones[subZone] = (entry.subZones[subZone] or 0) + lootCount
 end
 
 local function GetCurrentZoneName()
@@ -1318,6 +1352,7 @@ local function OnLootMessage(event, msg)
     if isAnglersAnomaly then
         entry.anglersAnomalyCount = (entry.anglersAnomalyCount or 0) + lootCount
     end
+    RecordSubZoneCatch(entry, lootCount)
     if icon then entry.icon = icon end
     if quality then entry.quality = quality end
     if itemId then entry.itemId = itemId end
@@ -1387,6 +1422,7 @@ local function OnCurrencyMessage(event, msg)
     if isAnglersAnomaly then
         entry.anglersAnomalyCount = (entry.anglersAnomalyCount or 0) + lootCount
     end
+    RecordSubZoneCatch(entry, lootCount)
     if icon then entry.icon = icon end
     if quality then entry.quality = quality end
     if currencyIdStr then entry.currencyId = tonumber(currencyIdStr) end
@@ -1438,6 +1474,14 @@ end
 
 local function OnSpellcastSucceeded(event, unit, castGUID, spellId)
     if unit ~= "player" then return end
+    if debugMode then
+        -- C_Spell.GetSpellName is retail; older clients only have GetSpellInfo
+        local spellName = (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellId))
+            or (GetSpellInfo and GetSpellInfo(spellId))
+        DEFAULT_CHAT_FRAME:AddMessage(string.format(
+            "|cFF4CBFF0Nemo debug|r: cast %s (%s) fishing=%s",
+            tostring(spellId), tostring(spellName), tostring(FISHING_SPELLS[spellId] == true)))
+    end
     if FISHING_SPELLS[spellId] then OnFishingDetected() end
 end
 
@@ -1466,6 +1510,11 @@ local function OnLootReady()
             RefreshDisplay()
             frame:Show()
         end
+    elseif not isFishing and IsFishingLoot and IsFishingLoot() then
+        -- Fallback for clients whose fishing spell IDs we don't know. The loot
+        -- window itself reports that it came from a fishing bobber, and
+        -- CHAT_MSG_LOOT fires after LOOT_READY, so the catch still gets counted.
+        OnFishingDetected()
     end
 end
 
@@ -1523,10 +1572,48 @@ local function BuildItemZoneLookup(itemName)
                 })
             end
             if normalCount > 0 then
-                table.insert(zones, {
-                    name  = zoneName,
-                    count = normalCount,
-                })
+                -- Split the zone's normal catches across the subzones they came
+                -- from. Catches recorded before subzone tracking existed have no
+                -- subzone, so whatever is left over shows as the plain zone name.
+                local attributed = 0
+                if entry.subZones then
+                    -- Sort by count first so the busiest spots are the named ones
+                    local subZones = {}
+                    for subZone, subCount in pairs(entry.subZones) do
+                        if subCount > 0 then
+                            table.insert(subZones, { name = subZone, count = subCount })
+                            attributed = attributed + subCount
+                        end
+                    end
+                    table.sort(subZones, function(a, b) return a.count > b.count end)
+
+                    local rolled = 0
+                    for i, sub in ipairs(subZones) do
+                        if i <= MAX_SUBZONE_LINES then
+                            table.insert(zones, {
+                                name  = zoneName .. " - " .. sub.name,
+                                count = sub.count,
+                            })
+                        else
+                            rolled = rolled + sub.count
+                        end
+                    end
+
+                    if rolled > 0 then
+                        table.insert(zones, {
+                            name  = zoneName .. " - elsewhere",
+                            count = rolled,
+                        })
+                    end
+                end
+
+                local remainder = normalCount - attributed
+                if remainder > 0 then
+                    table.insert(zones, {
+                        name  = zoneName,
+                        count = remainder,
+                    })
+                end
             end
         end
     end
@@ -1823,12 +1910,23 @@ eventFrame:SetScript("OnEvent", function(self, event, ...)
         OnSpellcastSucceeded(event, ...)
 
     elseif event == "CHAT_MSG_LOOT" then
+        if debugMode then
+            -- Double the pipes so raw link and color codes print as plain text
+            local msg = tostring((...)):gsub("|", "||")
+            DEFAULT_CHAT_FRAME:AddMessage(string.format(
+                "|cFF4CBFF0Nemo debug|r: loot isFishing=%s msg=%s", tostring(isFishing), msg))
+        end
         OnLootMessage(event, ...)
 
     elseif event == "CHAT_MSG_CURRENCY" then
         OnCurrencyMessage(event, ...)
 
     elseif event == "LOOT_READY" then
+        if debugMode then
+            DEFAULT_CHAT_FRAME:AddMessage(string.format(
+                "|cFF4CBFF0Nemo debug|r: LOOT_READY isFishingLoot=%s isFishing=%s",
+                tostring(IsFishingLoot and IsFishingLoot()), tostring(isFishing)))
+        end
         OnLootReady()
 
     elseif event == "ZONE_CHANGED_NEW_AREA" or event == "ZONE_CHANGED" then
@@ -1887,8 +1985,10 @@ SlashCmdList["NEMO"] = function(input)
     elseif cmd == "zone" then
         local mapId = GetCurrentMapId()
         local name = GetCurrentZoneName()
+        local subZone = GetCurrentSubZone()
         DEFAULT_CHAT_FRAME:AddMessage(string.format(
-            "|cFF4CBFF0Nemo|r: %s (mapId: %s)", name, tostring(mapId)))
+            "|cFF4CBFF0Nemo|r: %s%s (mapId: %s)",
+            name, subZone and (" - " .. subZone) or "", tostring(mapId)))
 
     elseif strsub(cmd, 1, 6) == "remove" then
         local itemName = strtrim(strsub(input, 8))
@@ -1942,6 +2042,11 @@ SlashCmdList["NEMO"] = function(input)
 
     elseif cmd == "quiet" then
         ToggleQuietMode()
+
+    elseif cmd == "debug" then
+        debugMode = not debugMode
+        DEFAULT_CHAT_FRAME:AddMessage("|cFF4CBFF0Nemo|r: Debug output " ..
+            (debugMode and "|cFF00FF00enabled|r." or "|cFFFF4444disabled|r."))
 
     elseif cmd == "session" then
         local timeStr = FormatFishingTime(GetTotalFishingTime())

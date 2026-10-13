@@ -1,8 +1,6 @@
 package-as: Nemo
 
 ignore:
-
-- screenshots
-- README.md
-- .gitignore
-- LICENSE
+    - screenshots
+    - README.md
+    - .gitignore

@@ -1,3 +1,7 @@
+### v1.2.6
+
+- fix: while in a party or raid, items crafted or looted by other group members could be logged as your own catches if they happened between your cast and your loot. Only your own received loot is counted now, and crafted items are never counted
+
 ### v1.2.4
 
 - fix: catches were not tracked on Classic-based clients (including the WoW Forever beta). Fishing was only recognised by the retail spell IDs, and Classic clients cast a different spell for every Fishing rank. The Classic rank IDs are now included, and as a client-agnostic backup a catch is also recognised when the loot window itself reports fishing loot

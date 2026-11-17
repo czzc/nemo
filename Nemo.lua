@@ -1308,8 +1308,48 @@ end
 -- LOOT CAPTURE (Items)
 ---------------------------------------------------------------------------
 
+-- CHAT_MSG_LOOT is not just the player's own loot. It also carries party and
+-- raid members' loot ("Bob receives loot: [X].") and crafts ("Bob creates: [X].",
+-- "You create: [X]."). isFishing stays true from the cast until the loot window
+-- closes, so anything a groupmate looted or crafted in that window used to be
+-- counted as a catch. We only accept messages matching the client's own
+-- "you received an item" formats. These come from the localized global strings,
+-- so the check works on every locale.
+local SELF_LOOT_FORMATS = {
+    LOOT_ITEM_SELF,                 -- "You receive loot: %s."
+    LOOT_ITEM_SELF_MULTIPLE,        -- "You receive loot: %sx%d."
+    LOOT_ITEM_PUSHED_SELF,          -- "You receive item: %s."
+    LOOT_ITEM_PUSHED_SELF_MULTIPLE, -- "You receive item: %sx%d."
+}
+
+-- Turns a format string like "You receive loot: %s." into an anchored Lua
+-- pattern. Handles positional arguments ("%1$s") used by some locales.
+local function FormatToPattern(fmt)
+    local pattern = fmt:gsub("[%(%)%.%%%+%-%*%?%[%]%^%$]", "%%%0") -- escape magic chars
+    pattern = pattern:gsub("%%%%%d%%%$s", "(.+)"):gsub("%%%%%d%%%$d", "(%%d+)")
+    pattern = pattern:gsub("%%%%s", "(.+)"):gsub("%%%%d", "(%%d+)")
+    return "^" .. pattern
+end
+
+local selfLootPatterns = {}
+for _, fmt in pairs(SELF_LOOT_FORMATS) do -- pairs: a missing global leaves a hole
+    selfLootPatterns[#selfLootPatterns + 1] = FormatToPattern(fmt)
+end
+
+local function IsSelfLootMessage(msg)
+    -- If the client has none of these globals, don't block all tracking
+    if #selfLootPatterns == 0 then return true end
+    for _, pattern in ipairs(selfLootPatterns) do
+        if msg:match(pattern) then return true end
+    end
+    return false
+end
+
 local function OnLootMessage(event, msg)
     if not isFishing then return end
+
+    -- Ignore groupmates' loot and all crafted items (see SELF_LOOT_FORMATS)
+    if not IsSelfLootMessage(msg) then return end
 
     -- If the player is in combat, this loot is from a kill, not fishing.
     if UnitAffectingCombat("player") then return end

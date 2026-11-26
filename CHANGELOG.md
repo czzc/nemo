@@ -1,3 +1,7 @@
+### v1.2.7
+
+- feat: added a **Show catches in item tooltips** checkbox to the settings panel, so the "Nemo - Caught in" breakdown can be turned off if you would rather keep item tooltips clean. It is on by default, and catches keep being tracked either way. (Thanks Tinter!)
+
 ### v1.2.6
 
 - fix: while in a party or raid, items crafted or looted by other group members could be logged as your own catches if they happened between your cast and your loot. Only your own received loot is counted now, and crafted items are never counted

@@ -14,6 +14,7 @@ local DEFAULT_SETTINGS = {
     locked         = false,
     accentColor    = { 0.86, 0.71, 0.19 },
     showTotal      = true,
+    showTooltip    = true,     -- add the "Caught in" breakdown to item tooltips
     autoShow       = true,
     autoHide       = true,
     hideDelay      = 45,
@@ -909,9 +910,22 @@ totalCheck:SetScript("OnClick", function(self)
     RefreshDisplay()
 end)
 
+-- Toggles the "Nemo - Caught in:" section on item tooltips. Nothing needs
+-- refreshing here because OnTooltipSetItem reads the setting each time a
+-- tooltip is built, so the change applies to the next tooltip shown.
+local tooltipCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
+tooltipCheck:SetSize(24, 24)
+tooltipCheck:SetPoint("TOPLEFT", 12, -362)
+tooltipCheck.text:SetText(" Show catches in item tooltips")
+tooltipCheck.text:SetFontObject("GameFontNormalSmall")
+tooltipCheck.text:SetTextColor(0.8, 0.8, 0.8)
+tooltipCheck:SetScript("OnClick", function(self)
+    settings.showTooltip = self:GetChecked()
+end)
+
 local autoShowCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
 autoShowCheck:SetSize(24, 24)
-autoShowCheck:SetPoint("TOPLEFT", 12, -362)
+autoShowCheck:SetPoint("TOPLEFT", 12, -388)
 autoShowCheck.text:SetText(" Auto-show when fishing")
 autoShowCheck.text:SetFontObject("GameFontNormalSmall")
 autoShowCheck.text:SetTextColor(0.8, 0.8, 0.8)
@@ -921,7 +935,7 @@ end)
 
 local autoHideCheck = CreateFrame("CheckButton", nil, settingsFrame, "UICheckButtonTemplate")
 autoHideCheck:SetSize(24, 24)
-autoHideCheck:SetPoint("TOPLEFT", 12, -388)
+autoHideCheck:SetPoint("TOPLEFT", 12, -414)
 autoHideCheck.text:SetText(" Auto-hide after idle / on combat")
 autoHideCheck.text:SetFontObject("GameFontNormalSmall")
 autoHideCheck.text:SetTextColor(0.8, 0.8, 0.8)
@@ -929,7 +943,7 @@ autoHideCheck.text:SetTextColor(0.8, 0.8, 0.8)
 -- Hide delay slider (nested under auto-hide)
 local hideDelayContainer = CreateFrame("Frame", nil, settingsFrame)
 hideDelayContainer:SetSize(240, 40)
-hideDelayContainer:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 36, -412)
+hideDelayContainer:SetPoint("TOPLEFT", settingsFrame, "TOPLEFT", 36, -438)
 
 local hideDelayLabel = hideDelayContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 hideDelayLabel:SetPoint("TOPLEFT", 0, 0)
@@ -1249,10 +1263,10 @@ end)
 local function SetHideDelayVisible(show)
     if show then
         hideDelayContainer:Show()
-        settingsFrame:SetHeight(466)
+        settingsFrame:SetHeight(492)
     else
         hideDelayContainer:Hide()
-        settingsFrame:SetHeight(426)
+        settingsFrame:SetHeight(452)
     end
 end
 
@@ -1270,6 +1284,7 @@ local function OpenSettings()
     scaleSlider.UpdateLabel()
     lockCheck:SetChecked(settings.locked)
     totalCheck:SetChecked(settings.showTotal)
+    tooltipCheck:SetChecked(settings.showTooltip)
     autoShowCheck:SetChecked(settings.autoShow)
     autoHideCheck:SetChecked(settings.autoHide)
     hideDelaySlider:SetValue(settings.hideDelay)
@@ -1665,6 +1680,10 @@ end
 
 local function OnTooltipSetItem(tooltip, data)
     if not NemoDB.catches then return end
+
+    -- Respect the "Show catches in item tooltips" setting. The settings local
+    -- is nil until ADDON_LOADED, and a tooltip can be built before then.
+    if not settings or not settings.showTooltip then return end
 
     local itemName
     if tooltip.GetItem then
